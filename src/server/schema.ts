@@ -170,8 +170,11 @@ export const assetVersions = pgTable(
     processingError: text("processing_error"),
     processingAttempts: integer("processing_attempts").notNull().default(0),
 
+    // Renditions written by the worker under versions/<id>/. Video: poster + 720p MP4.
+    // Image: posterKey is a small WebP thumbnail, previewKey a large WebP for viewing.
     posterKey: text("poster_key"),
     mp4Key: text("mp4_key"),
+    previewKey: text("preview_key"),
 
     durationMs: integer("duration_ms"),
     width: integer("width"),
