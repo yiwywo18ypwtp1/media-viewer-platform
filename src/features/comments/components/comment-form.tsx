@@ -5,12 +5,17 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent 
 import { useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 import { Button, FormMessage } from "@/components/form";
+import { AnnotationField } from "@/features/annotations/components/annotation-field";
+import { annotationSchema } from "@/features/annotations/schema";
 import { currentFrameMs, useOptionalPlayer } from "@/features/player/player-context";
 import { formatTimecode } from "@/features/player/timecode";
 import { createCommentSchema, keepMentionsInBody, type Member } from "../schema";
 
 // The form's own schema is a slice of the API schema: same rules on both sides.
-const formSchema = createCommentSchema.pick({ body: true, mentions: true, timecodeMs: true });
+// `annotation` is re-declared without the API's default: the form always holds it.
+const formSchema = createCommentSchema
+  .pick({ body: true, mentions: true, timecodeMs: true })
+  .extend({ annotation: annotationSchema.nullable() });
 type FormValues = z.infer<typeof formSchema>;
 
 type Props = {
@@ -32,10 +37,16 @@ export function CommentForm(props: Props) {
   const player = useOptionalPlayer();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { body: props.initial?.body ?? "", mentions: props.initial?.mentions ?? [], timecodeMs: null },
+    defaultValues: {
+      body: props.initial?.body ?? "",
+      mentions: props.initial?.mentions ?? [],
+      timecodeMs: null,
+      annotation: null,
+    },
   });
   const { errors, isSubmitting } = form.formState;
   const timecodeMs = useWatch({ control: form.control, name: "timecodeMs" });
+  const annotation = useWatch({ control: form.control, name: "annotation" });
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const timecodeRemoved = useRef(false);
   const listId = useId();
@@ -65,10 +76,12 @@ export function CommentForm(props: Props) {
   }, [draftKey, form]);
 
   // --- Timecode ---
-  function captureTimecode() {
+  function captureTimecode(): number | null {
     const video = player?.videoRef.current;
-    if (!props.withTimecode || !player || !video) return;
-    form.setValue("timecodeMs", currentFrameMs(video, player.rate));
+    if (!props.withTimecode || !player || !video) return null;
+    const ms = currentFrameMs(video, player.rate);
+    form.setValue("timecodeMs", ms);
+    return ms;
   }
 
   // --- Mentions ---
@@ -130,7 +143,7 @@ export function CommentForm(props: Props) {
   const submit = (event?: FormEvent) =>
     form.handleSubmit(async (values) => {
       const cleaned = { ...values, mentions: keepMentionsInBody(values.body, values.mentions, props.members) };
-      form.reset({ body: "", mentions: [], timecodeMs: null });
+      form.reset({ body: "", mentions: [], timecodeMs: null, annotation: null });
       timecodeRemoved.current = false;
       const error = await props.onSubmit(cleaned);
       if (error) {
@@ -163,6 +176,8 @@ export function CommentForm(props: Props) {
                 onClick={() => {
                   timecodeRemoved.current = true;
                   form.setValue("timecodeMs", null);
+                  // A drawing belongs to a frame; no timecode, no drawing.
+                  form.setValue("annotation", null);
                 }}
               >
                 No timecode
@@ -181,6 +196,18 @@ export function CommentForm(props: Props) {
             </button>
           )}
         </div>
+      )}
+
+      {props.withTimecode && player && (
+        <AnnotationField
+          value={annotation}
+          onChange={(value) => form.setValue("annotation", value, { shouldDirty: true })}
+          atMs={timecodeMs}
+          pinCurrentFrame={() => {
+            timecodeRemoved.current = false;
+            return captureTimecode();
+          }}
+        />
       )}
 
       <div className="relative">

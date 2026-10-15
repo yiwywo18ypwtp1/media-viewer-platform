@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { AnnotationLayer } from "@/features/annotations/components/annotation-layer";
 import { Player } from "@/features/player/components/player";
 import type { PlaybackUrls } from "@/features/player/playback";
 import { PlayerProvider, seekTo, useOptionalPlayer } from "@/features/player/player-context";
@@ -61,8 +62,14 @@ function Workspace(props: Props) {
     setClickedId(id);
   }
 
+  // The selected comment's drawing, shown over its frame (the layer hides
+  // itself when the video plays or moves to another frame).
+  const selected = comments.threads.find((thread) => thread.id === selectedId);
+  const showSelectedDrawing = player && !player.drawing && selected?.annotation && selected.timecodeMs !== null;
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+      {showSelectedDrawing && <AnnotationLayer shapes={selected.annotation!} atMs={selected.timecodeMs!} />}
       <div>
         {props.video ? (
           <Player

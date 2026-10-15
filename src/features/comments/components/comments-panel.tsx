@@ -125,7 +125,12 @@ function Thread({ thread, ...props }: Props & { thread: ClientComment }) {
             submitLabel="Reply"
             autoFocus
             onSubmit={async (values) => {
-              const error = await props.comments.create({ ...values, timecodeMs: null, parentId: thread.id });
+              const error = await props.comments.create({
+                ...values,
+                timecodeMs: null,
+                annotation: null,
+                parentId: thread.id,
+              });
               if (!error) setReplying(false);
               return error;
             }}
@@ -180,6 +185,7 @@ function CommentItem({ comment, ...props }: Props & { comment: ClientComment }) 
         <time dateTime={comment.createdAt} suppressHydrationWarning>
           {timeFormat.format(new Date(comment.createdAt))}
         </time>
+        {comment.annotation && <span title="Has a drawing on the frame">✎ drawing</span>}
         {comment.editedAt && <span>(edited)</span>}
         {comment.pending && <span>Sending…</span>}
         {comment.resolvedAt && <span className="text-green-700 dark:text-green-500">Resolved</span>}

@@ -22,7 +22,7 @@ type Props = {
 // user action (playing, speed, mute, fullscreen); the playback position is read
 // from the element and drawn through refs (see use-video-time.ts).
 export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelect }: Props) {
-  const { videoRef, rate } = usePlayer();
+  const { videoRef, rate, setOverlayHost } = usePlayer();
   const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [urls, setUrls] = useState(initialUrls);
@@ -185,6 +185,8 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
             onLoadedMetadata={onLoadedMetadata}
             className={`w-full object-contain ${fullscreen ? "h-full" : "max-h-[70vh]"}`}
           />
+          {/* Annotation layers are portaled in here (see annotation-layer.tsx). */}
+          <div ref={setOverlayHost} className="pointer-events-none absolute inset-0" />
           {error && (
             <p role="alert" className="absolute inset-x-0 bottom-4 text-center text-sm text-red-300">
               {error}

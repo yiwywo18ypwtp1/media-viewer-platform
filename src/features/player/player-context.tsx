@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, use, useRef, type ReactNode, type RefObject } from "react";
+import { createContext, use, useRef, useState, type ReactNode, type RefObject } from "react";
 import { frameAt, frameMiddle, frameRate, type FrameRate } from "./timecode";
 
 // What the player shares with its controls, the comment form and (later) the
@@ -13,6 +13,14 @@ export type PlayerContextValue = {
   videoRef: RefObject<HTMLVideoElement | null>;
   rate: FrameRate;
   durationSeconds: number;
+  // An empty element laid over the video (inside the fullscreen container).
+  // Annotation layers are portaled into it from wherever they're rendered.
+  overlayHost: HTMLDivElement | null;
+  setOverlayHost: (element: HTMLDivElement | null) => void;
+  // True while the comment form has a drawing in progress: the layer showing a
+  // selected comment's drawing steps aside.
+  drawing: boolean;
+  setDrawing: (drawing: boolean) => void;
 };
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -21,10 +29,25 @@ const PlayerContext = createContext<PlayerContextValue | null>(null);
 // read it through usePlayer().
 export function PlayerProvider(props: { fps: number | null; durationMs: number; children: ReactNode }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // State, not a ref: portals need to re-render once the element exists.
+  const [overlayHost, setOverlayHost] = useState<HTMLDivElement | null>(null);
+  const [drawing, setDrawing] = useState(false);
   // ffprobe gives fps for nearly every file; 25 is a safe fallback for the rest.
   const rate = frameRate(props.fps ?? 25);
   return (
-    <PlayerContext value={{ videoRef, rate, durationSeconds: props.durationMs / 1000 }}>{props.children}</PlayerContext>
+    <PlayerContext
+      value={{
+        videoRef,
+        rate,
+        durationSeconds: props.durationMs / 1000,
+        overlayHost,
+        setOverlayHost,
+        drawing,
+        setDrawing,
+      }}
+    >
+      {props.children}
+    </PlayerContext>
   );
 }
 
