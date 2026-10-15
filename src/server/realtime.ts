@@ -22,4 +22,7 @@ export type CommentEvent =
   | { type: "comment"; action: "upserted"; versionId: string; comment: CommentDto }
   | { type: "comment"; action: "deleted"; versionId: string; commentId: string; parentId: string | null };
 
-export type RealtimeEvent = ProcessingEvent | CommentEvent;
+// Review requests: small and rare, so receivers just re-render from the server.
+export type ReviewEvent = { type: "review"; assetId: string };
+
+export type RealtimeEvent = ProcessingEvent | CommentEvent | ReviewEvent;

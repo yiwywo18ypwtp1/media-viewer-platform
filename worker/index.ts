@@ -11,6 +11,7 @@ import { createS3Client } from "../src/server/s3-client";
 import * as schema from "../src/server/schema";
 import { createCleanupUploads } from "./jobs/cleanup-uploads";
 import { createProcessMedia } from "./jobs/process-media";
+import { createReviewReminder } from "./jobs/review-reminder";
 import { createSendEmail } from "./jobs/send-email";
 import { createSweepPending } from "./jobs/sweep-pending";
 
@@ -51,6 +52,7 @@ async function main() {
   const processMedia = createProcessMedia({ db, s3, bucket: env.S3_BUCKET, publisher: redis, log });
   const cleanupUploads = createCleanupUploads({ db, s3, bucket: env.S3_BUCKET, log });
   const sweepPending = createSweepPending({ db, mediaQueue, log });
+  const reviewReminder = createReviewReminder({ db, mailer, from: env.MAIL_FROM, appUrl: env.APP_URL, log });
 
   const workers = [
     // Task 3.3: one worker transcodes at most 2 videos at a time.
@@ -61,6 +63,7 @@ async function main() {
       async (job) => {
         if (job.name === "cleanup-uploads") await cleanupUploads();
         if (job.name === "sweep-pending") await sweepPending();
+        if (job.name === "review-reminder") await reviewReminder(job);
       },
       { connection: redis },
     ),

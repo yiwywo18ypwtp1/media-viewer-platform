@@ -34,3 +34,6 @@ export const MEDIA_JOB_OPTIONS: DefaultJobOptions = {
 };
 
 export const MAINTENANCE_QUEUE = "maintenance";
+
+// Delayed job on the maintenance queue: fires 24 h before a review is due.
+export type ReviewReminderJob = { requestId: string };

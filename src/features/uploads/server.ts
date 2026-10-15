@@ -21,7 +21,7 @@ import { getEnv } from "@/server/env";
 import { logger } from "@/server/logger";
 import { getMediaQueue } from "@/server/queues";
 import { getPresignS3, getS3 } from "@/server/s3";
-import { assets, assetVersions, uploads } from "@/server/schema";
+import { assets, assetVersions, reviewRequests, uploads } from "@/server/schema";
 import {
   ALLOWED_MIME_TYPES,
   planParts,
@@ -212,7 +212,14 @@ export async function completeUpload(
         .from(assetVersions)
         .where(eq(assetVersions.assetId, assetId));
       number = latest.max + 1;
-      await tx.update(assets).set({ updatedAt: new Date() }).where(eq(assets.id, assetId));
+      // A new version is back in review, and a review running on an older
+      // version no longer reviews the latest: it becomes stale (the asset
+      // page offers to restart it on the new version).
+      await tx.update(assets).set({ updatedAt: new Date(), status: "in_review" }).where(eq(assets.id, assetId));
+      await tx
+        .update(reviewRequests)
+        .set({ status: "stale", completedAt: new Date() })
+        .where(and(eq(reviewRequests.assetId, assetId), eq(reviewRequests.status, "active")));
     } else {
       const [asset] = await tx
         .insert(assets)
