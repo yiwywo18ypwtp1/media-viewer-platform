@@ -1,0 +1,43 @@
+# Development overrides with hot reload:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Only this file references docker-compose.yml, never the other way around.
+
+services:
+  web:
+    build: { context: ., target: dev }
+    command: ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/app
+      # Keep the container's own node_modules and build cache, not the host's.
+      - /app/node_modules
+      - /app/.next
+    # The production HEALTHCHECK applies to the `web` target only.
+    healthcheck:
+      disable: true
+
+  worker:
+    build: { context: ., target: dev }
+    command: ["npx", "tsx", "watch", "worker/index.ts"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/app
+      - /app/node_modules
+    healthcheck:
+      disable: true
+
+  migrate:
+    build: { context: ., target: dev }
+    command: ["npx", "tsx", "scripts/migrate.ts"]
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+  postgres:
+    # Exposed for local DB tools; 5433 to avoid clashing with a host Postgres.
+    ports: ["5433:5432"]
+
+  redis:
+    ports: ["6379:6379"]
