@@ -9,3 +9,10 @@ export type EmailJob = {
   subject: string;
   text: string;
 };
+
+export const MEDIA_QUEUE = "media";
+
+// jobId is the versionId, so enqueueing the same version twice is a no-op.
+export type MediaJob = { versionId: string };
+
+export const MAINTENANCE_QUEUE = "maintenance";
