@@ -5,12 +5,14 @@ import { Redis } from "ioredis";
 import nodemailer from "nodemailer";
 import postgres from "postgres";
 import { parseEnv, workerEnvSchema, type WorkerEnv } from "../src/server/env-schema";
-import { EMAIL_QUEUE, MAINTENANCE_QUEUE } from "../src/server/jobs";
+import { EMAIL_QUEUE, MAINTENANCE_QUEUE, MEDIA_QUEUE, type MediaJob } from "../src/server/jobs";
 import { createLogger } from "../src/server/logger";
 import { createS3Client } from "../src/server/s3-client";
 import * as schema from "../src/server/schema";
 import { createCleanupUploads } from "./jobs/cleanup-uploads";
+import { createProcessMedia } from "./jobs/process-media";
 import { createSendEmail } from "./jobs/send-email";
+import { createSweepPending } from "./jobs/sweep-pending";
 
 const log = createLogger("worker");
 
@@ -43,14 +45,22 @@ async function main() {
   });
   const mailer = nodemailer.createTransport({ host: env.SMTP_HOST, port: env.SMTP_PORT });
 
+  const mediaQueue = new Queue<MediaJob>(MEDIA_QUEUE, { connection: redis });
+  const maintenance = new Queue(MAINTENANCE_QUEUE, { connection: redis });
+
+  const processMedia = createProcessMedia({ db, s3, bucket: env.S3_BUCKET, publisher: redis, log });
   const cleanupUploads = createCleanupUploads({ db, s3, bucket: env.S3_BUCKET, log });
+  const sweepPending = createSweepPending({ db, mediaQueue, log });
 
   const workers = [
+    // Task 3.3: one worker transcodes at most 2 videos at a time.
+    new Worker(MEDIA_QUEUE, processMedia, { connection: redis, concurrency: 2 }),
     new Worker(EMAIL_QUEUE, createSendEmail(mailer, env.MAIL_FROM), { connection: redis, concurrency: 5 }),
     new Worker(
       MAINTENANCE_QUEUE,
       async (job) => {
         if (job.name === "cleanup-uploads") await cleanupUploads();
+        if (job.name === "sweep-pending") await sweepPending();
       },
       { connection: redis },
     ),
@@ -58,8 +68,8 @@ async function main() {
 
   // Idempotent: every worker replica upserts the same scheduler, and BullMQ
   // runs each tick once no matter how many replicas there are.
-  const maintenance = new Queue(MAINTENANCE_QUEUE, { connection: redis });
   await maintenance.upsertJobScheduler("cleanup-uploads", { every: 60 * 60 * 1000 }, { name: "cleanup-uploads" });
+  await maintenance.upsertJobScheduler("sweep-pending", { every: 60 * 1000 }, { name: "sweep-pending" });
 
   for (const worker of workers) {
     worker.on("completed", (job) => log.info({ queue: worker.name, jobId: job.id }, "job completed"));
@@ -83,7 +93,7 @@ async function main() {
     clearInterval(heartbeat);
     // close() stops taking new jobs and waits for the active ones to finish.
     await Promise.all(workers.map((worker) => worker.close()));
-    await maintenance.close();
+    await Promise.all([maintenance.close(), mediaQueue.close()]);
     await redis.quit();
     await sql.end();
     log.info("shutdown complete");
