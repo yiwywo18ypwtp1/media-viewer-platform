@@ -1,4 +1,5 @@
-import type { S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getEnv } from "./env";
 import { createS3Client } from "./s3-client";
 
@@ -28,4 +29,12 @@ export function getPresignS3() {
     secretKey: env.S3_SECRET_KEY,
   });
   return globalForS3.presignS3;
+}
+
+// Short-lived GET URL the browser can load directly (posters, playback).
+// Callers must have checked access first: the URL itself is the permission.
+export function presignGetUrl(key: string, expiresInSeconds = 15 * 60) {
+  return getSignedUrl(getPresignS3(), new GetObjectCommand({ Bucket: getEnv().S3_BUCKET, Key: key }), {
+    expiresIn: expiresInSeconds,
+  });
 }
