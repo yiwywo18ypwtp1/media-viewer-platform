@@ -1,0 +1,110 @@
+name: media-review-hub
+
+services:
+  web:
+    build: { context: ., target: web }
+    env_file: .env
+    # tini as PID 1: forwards signals and reaps zombies.
+    init: true
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    # Next finishes in-flight requests on SIGTERM; this bounds how long it may take.
+    stop_grace_period: 30s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+
+  worker:
+    build: { context: ., target: worker }
+    env_file: .env
+    init: true
+    restart: unless-stopped
+    # Long enough for the active transcoding job to finish on `docker compose stop`.
+    stop_grace_period: 2m
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+      mailpit: { condition: service_healthy }
+
+  migrate:
+    build: { context: ., target: migrate }
+    env_file: .env
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF so queued jobs survive a restart; noeviction as BullMQ requires.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    # MinIO no longer publishes official images; Chainguard builds it from source.
+    # Pinned by digest for reproducible builds.
+    image: cgr.dev/chainguard/minio@sha256:2136d593beacf4461187035eca949fe49abd589d5079735025c711ca58fee0c8
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+      # Browser uploads parts straight to MinIO, so it must allow our origin.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${APP_URL}
+      # Server-wide replacement for an AbortIncompleteMultipartUpload rule.
+      MINIO_API_STALE_UPLOADS_EXPIRY: 24h
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 1h
+    ports: ["9000:9000"]
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio-init:
+    image: cgr.dev/chainguard/minio@sha256:2136d593beacf4461187035eca949fe49abd589d5079735025c711ca58fee0c8
+    entrypoint: ["sh", "/minio-init.sh"]
+    env_file: .env
+    volumes: ["./docker/minio-init.sh:/minio-init.sh:ro"]
+    restart: "no"
+    depends_on:
+      minio: { condition: service_healthy }
+
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    restart: unless-stopped
+    ports: ["8025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

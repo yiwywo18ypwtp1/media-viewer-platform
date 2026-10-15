@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
     // so Next's image optimizer (and `sharp` in the web image) isn't needed.
     unoptimized: true,
   },
+  // ...so `sharp` (~45 MB of native libs) is dead weight in the 250 MB image.
+  outputFileTracingExcludes: {
+    "*": ["node_modules/sharp/**", "node_modules/@img/**"],
+  },
   turbopack: {
     rules: {
       "*.css": {
