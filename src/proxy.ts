@@ -5,7 +5,7 @@ import { SESSION_COOKIE } from "@/features/auth/cookie";
 // the database. The real check (valid, unexpired session) is requireUser()
 // in the data layer, which every protected page and action goes through.
 
-const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password"];
+const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/invite"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

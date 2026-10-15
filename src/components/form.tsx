@@ -28,6 +28,15 @@ export function Input({ className = "", ...props }: ComponentProps<"input">) {
   );
 }
 
+export function Select({ className = "", ...props }: ComponentProps<"select">) {
+  return (
+    <select
+      className={`rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-100 ${className}`}
+      {...props}
+    />
+  );
+}
+
 export function Button({ className = "", ...props }: ComponentProps<"button">) {
   return (
     <button
