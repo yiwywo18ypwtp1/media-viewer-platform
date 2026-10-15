@@ -39,6 +39,9 @@ export function ProjectEvents({ projectId, children }: { projectId: string; chil
     source.onmessage = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as RealtimeEvent;
       listeners.current.forEach((listener) => listener(event));
+      // Review changes are rare and touch several parts of the page (status
+      // badge, review panel): simplest to re-render from the server.
+      if (event.type === "review") return router.refresh();
       if (event.type !== "processing") return;
 
       if (event.state === "ready" || event.state === "failed") {

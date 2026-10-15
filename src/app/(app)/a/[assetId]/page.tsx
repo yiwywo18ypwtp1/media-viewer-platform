@@ -6,6 +6,8 @@ import { getAssetAccess, listVersions } from "@/features/assets/queries";
 import { ReviewWorkspace } from "@/features/comments/components/review-workspace";
 import { listComments, listMarkers } from "@/features/comments/server";
 import { getPlaybackUrls } from "@/features/player/playback";
+import { ReviewPanel } from "@/features/reviews/components/review-panel";
+import { getLatestReview } from "@/features/reviews/server";
 import { ProcessingBadge } from "@/features/processing/components/processing-badge";
 import { ProjectEvents } from "@/features/processing/components/project-events";
 import { listMembers } from "@/features/workspaces/queries";
@@ -25,11 +27,12 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
   const requested = Number((await searchParams).v);
   const version = versions.find((v) => v.number === requested) ?? versions[0];
 
-  const [urls, firstPage, markers, members] = await Promise.all([
+  const [urls, firstPage, markers, members, review] = await Promise.all([
     version.processingState === "ready" ? getPlaybackUrls(asset.id, version.id) : null,
     listComments(version.id, null),
     listMarkers(version.id),
     listMembers(workspace.id),
+    getLatestReview(asset.id),
   ]);
 
   // Shown instead of the player for images and versions still processing.
@@ -96,6 +99,15 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
       </div>
 
       <ProjectEvents projectId={project.id}>
+        <ReviewPanel
+          assetId={asset.id}
+          review={review}
+          currentUserId={user.id}
+          canRequest={can(role, "requestReview")}
+          versions={versions.map((v) => ({ id: v.id, number: v.number }))}
+          selectedVersionId={version.id}
+          reviewers={members.filter((m) => can(m.role, "decideReview")).map((m) => ({ id: m.userId, name: m.name }))}
+        />
         <ReviewWorkspace
           // A different version is a different review: fresh comment state and player.
           key={version.id}
