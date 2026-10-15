@@ -12,6 +12,7 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly fieldErrors?: Record<string, string>,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -20,7 +21,7 @@ export class ApiError extends Error {
 export function errorResponse(error: unknown): Response {
   if (error instanceof ApiError) {
     return Response.json(
-      { error: { code: error.code, message: error.message, fieldErrors: error.fieldErrors } },
+      { error: { code: error.code, message: error.message, fieldErrors: error.fieldErrors, details: error.details } },
       { status: error.status },
     );
   }

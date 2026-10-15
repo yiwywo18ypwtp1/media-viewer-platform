@@ -37,3 +37,11 @@ export function invitationEmail(input: {
     ].join("\n"),
   };
 }
+
+export function mentionEmail(input: { to: string; authorName: string; assetName: string; excerpt: string; url: string }): EmailJob {
+  return {
+    to: input.to,
+    subject: `${input.authorName} mentioned you on ${input.assetName}`,
+    text: [`${input.authorName} mentioned you in a comment on "${input.assetName}":`, "", input.excerpt, "", input.url].join("\n"),
+  };
+}
