@@ -1,10 +1,15 @@
 import { writeFile } from "node:fs/promises";
-import { Worker } from "bullmq";
+import { Queue, Worker } from "bullmq";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { Redis } from "ioredis";
 import nodemailer from "nodemailer";
+import postgres from "postgres";
 import { parseEnv, workerEnvSchema, type WorkerEnv } from "../src/server/env-schema";
-import { EMAIL_QUEUE } from "../src/server/jobs";
+import { EMAIL_QUEUE, MAINTENANCE_QUEUE } from "../src/server/jobs";
 import { createLogger } from "../src/server/logger";
+import { createS3Client } from "../src/server/s3-client";
+import * as schema from "../src/server/schema";
+import { createCleanupUploads } from "./jobs/cleanup-uploads";
 import { createSendEmail } from "./jobs/send-email";
 
 const log = createLogger("worker");
@@ -28,14 +33,33 @@ async function main() {
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   redis.on("error", (error) => log.warn({ err: error }, "redis connection error"));
 
+  const sql = postgres(env.DATABASE_URL, { max: 5 });
+  const db = drizzle(sql, { schema });
+  const s3 = createS3Client({
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    accessKey: env.S3_ACCESS_KEY,
+    secretKey: env.S3_SECRET_KEY,
+  });
   const mailer = nodemailer.createTransport({ host: env.SMTP_HOST, port: env.SMTP_PORT });
 
+  const cleanupUploads = createCleanupUploads({ db, s3, bucket: env.S3_BUCKET, log });
+
   const workers = [
-    new Worker(EMAIL_QUEUE, createSendEmail(mailer, env.MAIL_FROM), {
-      connection: redis,
-      concurrency: 5,
-    }),
+    new Worker(EMAIL_QUEUE, createSendEmail(mailer, env.MAIL_FROM), { connection: redis, concurrency: 5 }),
+    new Worker(
+      MAINTENANCE_QUEUE,
+      async (job) => {
+        if (job.name === "cleanup-uploads") await cleanupUploads();
+      },
+      { connection: redis },
+    ),
   ];
+
+  // Idempotent: every worker replica upserts the same scheduler, and BullMQ
+  // runs each tick once no matter how many replicas there are.
+  const maintenance = new Queue(MAINTENANCE_QUEUE, { connection: redis });
+  await maintenance.upsertJobScheduler("cleanup-uploads", { every: 60 * 60 * 1000 }, { name: "cleanup-uploads" });
 
   for (const worker of workers) {
     worker.on("completed", (job) => log.info({ queue: worker.name, jobId: job.id }, "job completed"));
@@ -59,7 +83,9 @@ async function main() {
     clearInterval(heartbeat);
     // close() stops taking new jobs and waits for the active ones to finish.
     await Promise.all(workers.map((worker) => worker.close()));
+    await maintenance.close();
     await redis.quit();
+    await sql.end();
     log.info("shutdown complete");
     process.exit(0);
   }
