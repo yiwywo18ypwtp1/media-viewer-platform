@@ -13,9 +13,11 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { Shape } from "../features/annotations/schema";
+import type { Step } from "../features/reviews/rules";
 import { ROLES } from "../features/workspaces/roles";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -248,5 +250,62 @@ export const comments = pgTable(
   (table) => [
     index("comments_version_created_idx").on(table.versionId, table.createdAt, table.id),
     index("comments_parent_id_idx").on(table.parentId),
+  ],
+);
+
+// --- Review requests ---
+
+export const reviewStatus = pgEnum("review_status", ["active", "approved", "changes_requested", "stale"]);
+export const reviewDecision = pgEnum("review_decision", ["approve", "request_changes"]);
+
+export const reviewRequests = pgTable(
+  "review_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    message: text("message"),
+    // Sequential steps, each with its reviewers and rule (all / any / atLeast N).
+    steps: jsonb("steps").$type<Step[]>().notNull(),
+    currentStep: integer("current_step").notNull().default(0),
+    status: reviewStatus("status").notNull().default("active"),
+    createdAt: createdAt(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("review_requests_asset_id_idx").on(table.assetId),
+    // At most one active review per asset, enforced by the database.
+    uniqueIndex("review_requests_one_active_per_asset").on(table.assetId).where(sql`status = 'active'`),
+  ],
+);
+
+export const reviewDecisions = pgTable(
+  "review_decisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => reviewRequests.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    step: integer("step").notNull(),
+    decision: reviewDecision("decision").notNull(),
+    note: text("note"),
+    // From the Idempotency-Key header: a retried request finds its decision here.
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("review_decisions_one_per_step").on(table.requestId, table.userId, table.step),
+    unique("review_decisions_idempotency").on(table.requestId, table.userId, table.idempotencyKey),
   ],
 );
