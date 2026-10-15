@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlaybackUrls } from "../playback";
-import { PlayerContext, seekTo, stepFrames, togglePlay } from "../player-context";
-import { frameRate } from "../timecode";
+import { seekTo, stepFrames, togglePlay, usePlayer } from "../player-context";
 import { ShortcutsDialog } from "./shortcuts-dialog";
-import { Timeline } from "./timeline";
+import { Timeline, type TimelineMarker } from "./timeline";
 import { TimecodeDisplay } from "./timecode-display";
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
@@ -14,16 +13,17 @@ type Props = {
   assetId: string;
   versionId: string;
   initialUrls: PlaybackUrls;
-  fps: number | null;
-  durationMs: number;
+  // Comment markers on the timeline; clicking one calls onMarkerSelect.
+  markers: TimelineMarker[];
+  onMarkerSelect: (id: string) => void;
 };
 
 // Native <video> with our own controls. React state holds only what changes on
 // user action (playing, speed, mute, fullscreen); the playback position is read
 // from the element and drawn through refs (see use-video-time.ts).
-export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Props) {
+export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelect }: Props) {
+  const { videoRef, rate } = usePlayer();
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [urls, setUrls] = useState(initialUrls);
   const [playing, setPlaying] = useState(false);
@@ -31,9 +31,6 @@ export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Pro
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // ffprobe gives fps for nearly every file; 25 is a safe fallback for the rest.
-  const rate = frameRate(fps ?? 25);
-  const durationSeconds = durationMs / 1000;
   const resumeAt = useRef<{ time: number; play: boolean } | null>(null);
   // Whether the user wants playback. Kept separately because on a media error
   // the browser marks the element paused *before* the "pause" event fires.
@@ -60,7 +57,7 @@ export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Pro
       events.forEach((name) => video.removeEventListener(name, sync));
       document.removeEventListener("fullscreenchange", onFullscreen);
     };
-  }, []);
+  }, [videoRef]);
 
   // Presigned URLs expire (10 min). When the browser then fails to fetch more
   // of the video, get fresh URLs and continue from the same position.
@@ -87,7 +84,7 @@ export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Pro
   useEffect(() => {
     const video = videoRef.current;
     if (video && urls.videoUrl) video.src = urls.videoUrl;
-  }, [urls]);
+  }, [urls, videoRef]);
 
   function onLoadedMetadata() {
     const video = videoRef.current;
@@ -169,10 +166,10 @@ export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Pro
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [rate]);
+  }, [rate, videoRef]);
 
   return (
-    <PlayerContext value={{ videoRef, rate, durationSeconds }}>
+    <>
       <div
         ref={containerRef}
         className={`flex flex-col overflow-hidden bg-black ${fullscreen ? "h-screen w-screen" : "rounded-md"}`}
@@ -196,7 +193,7 @@ export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Pro
         </div>
 
         <div className="flex flex-col gap-2 px-3 py-2 text-white">
-          <Timeline />
+          <Timeline markers={markers} onMarkerSelect={onMarkerSelect} />
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <button
               type="button"
@@ -250,6 +247,6 @@ export function Player({ assetId, versionId, initialUrls, fps, durationMs }: Pro
         </div>
       </div>
       <ShortcutsDialog dialogRef={dialogRef} />
-    </PlayerContext>
+    </>
   );
 }

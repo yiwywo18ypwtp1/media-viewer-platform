@@ -11,6 +11,7 @@ export const SHORTCUTS: [keys: string, action: string][] = [
   ["F", "Fullscreen"],
   ["M", "Mute"],
   ["?", "Show this list"],
+  ["Ctrl/⌘ + Enter", "Send a comment"],
 ];
 
 // Native <dialog>: focus trapping, Esc to close and the backdrop come free.
