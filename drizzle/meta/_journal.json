@@ -15,6 +15,13 @@
       "when": 1792058078486,
       "tag": "0001_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792059918320,
+      "tag": "0002_workspaces",
+      "breakpoints": true
     }
   ]
 }
