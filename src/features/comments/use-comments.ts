@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useOptimistic, useState } from "react";
+import type { Shape } from "@/features/annotations/schema";
 import { useProjectEvent } from "@/features/processing/components/project-events";
 import {
   applyCommentChange,
@@ -28,7 +29,13 @@ async function api<T>(url: string, init?: RequestInit): Promise<ApiResult<T>> {
   }
 }
 
-export type NewComment = { body: string; mentions: string[]; timecodeMs: number | null; parentId: string | null };
+export type NewComment = {
+  body: string;
+  mentions: string[];
+  timecodeMs: number | null;
+  annotation: Shape[] | null;
+  parentId: string | null;
+};
 
 // Comment list state for one version: first page from the server render,
 // more pages on demand, live updates over SSE, and the mutations.
@@ -73,6 +80,7 @@ export function useComments(props: {
       author: props.author,
       body: input.body,
       timecodeMs: input.parentId ? null : input.timecodeMs,
+      annotation: input.parentId || input.timecodeMs === null ? null : input.annotation,
       mentions: input.mentions,
       resolvedAt: null,
       createdAt: new Date().toISOString(),

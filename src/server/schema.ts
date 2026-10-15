@@ -5,6 +5,7 @@ import {
   bigint,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -14,6 +15,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { Shape } from "../features/annotations/schema";
 import { ROLES } from "../features/workspaces/roles";
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -233,6 +235,8 @@ export const comments = pgTable(
     body: text("body").notNull(),
     // Video time the comment points at (frame middle, see player/timecode.ts).
     timecodeMs: integer("timecode_ms"),
+    // Drawing over that frame: normalized shapes (see features/annotations).
+    annotation: jsonb("annotation").$type<Shape[]>(),
     mentionedUserIds: uuid("mentioned_user_ids").array().notNull().default(sql`'{}'::uuid[]`),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     // Millisecond precision so the pagination cursor round-trips through JS Date exactly.

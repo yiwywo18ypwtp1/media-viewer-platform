@@ -9,6 +9,7 @@ function comment(id: string, overrides: Partial<ClientComment> = {}): ClientComm
     author: { id: "u", name: "U" },
     body: id,
     timecodeMs: null,
+    annotation: null,
     mentions: [],
     resolvedAt: null,
     createdAt: "2026-10-15T10:00:00.000Z",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { annotationSchema, type Shape } from "@/features/annotations/schema";
 
 // Shared by the comment form (zodResolver) and the comment API routes.
 
@@ -15,6 +16,9 @@ export const createCommentSchema = z.object({
   id: z.uuid(),
   body,
   timecodeMs: z.number().int().min(0).nullable(),
+  // Part of the form value: the drawing travels with the comment. Optional in
+  // the API (defaults to none), so clients that don't draw needn't send it.
+  annotation: annotationSchema.nullable().default(null),
   parentId: z.uuid().nullable(),
   mentions: z.array(z.uuid()).max(50),
 });
@@ -34,6 +38,7 @@ export type CommentDto = {
   author: { id: string; name: string };
   body: string;
   timecodeMs: number | null;
+  annotation: Shape[] | null;
   mentions: string[];
   resolvedAt: string | null;
   createdAt: string;

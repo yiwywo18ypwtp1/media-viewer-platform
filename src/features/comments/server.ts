@@ -14,6 +14,7 @@ import { getEmailQueue } from "@/server/queues";
 import { projectChannel, type CommentEvent } from "@/server/realtime";
 import { getRedis } from "@/server/redis";
 import { assets, assetVersions, comments, users } from "@/server/schema";
+import type { Shape } from "@/features/annotations/schema";
 import type { Marker } from "./comment-changes";
 import { decodeCursor, encodeCursor } from "./cursor";
 import {
@@ -63,6 +64,7 @@ const commentColumns = {
   authorName: users.name,
   body: comments.body,
   timecodeMs: comments.timecodeMs,
+  annotation: comments.annotation,
   mentions: comments.mentionedUserIds,
   resolvedAt: comments.resolvedAt,
   createdAt: comments.createdAt,
@@ -78,6 +80,7 @@ type CommentRow = {
   authorName: string;
   body: string;
   timecodeMs: number | null;
+  annotation: Shape[] | null;
   mentions: string[];
   resolvedAt: Date | null;
   createdAt: Date;
@@ -93,6 +96,7 @@ function toDto(row: CommentRow, replies: CommentDto[] = []): CommentDto {
     author: { id: row.authorId, name: row.authorName },
     body: row.body,
     timecodeMs: row.timecodeMs,
+    annotation: row.annotation,
     mentions: row.mentions,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -225,6 +229,9 @@ export async function createComment(
     });
   }
 
+  // A drawing belongs to a frame: only kept on comments that have a timecode.
+  const annotation = timecodeMs === null ? null : input.annotation;
+
   const members = (await listMembers(workspaceId)).map((m) => ({ id: m.userId, name: m.name, email: m.email }));
   const mentions = keepMentionsInBody(input.body, input.mentions, members);
 
@@ -237,6 +244,7 @@ export async function createComment(
       parentId: input.parentId,
       body: input.body,
       timecodeMs,
+      annotation,
       mentionedUserIds: mentions,
     })
     // A retried POST with the same client id is a no-op, not a duplicate.
