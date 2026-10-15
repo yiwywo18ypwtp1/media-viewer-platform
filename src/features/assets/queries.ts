@@ -1,12 +1,14 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { getProjectAccess } from "@/features/workspaces/queries";
+import { isUuid } from "@/lib/ids";
 import { getDb } from "@/server/db";
 import { presignGetUrl } from "@/server/s3";
-import { assets, assetVersions } from "@/server/schema";
+import { assets, assetVersions, users } from "@/server/schema";
 import type { ListParams } from "./list-params";
 
-// Callers check project access (getProjectAccess) before calling: this module
-// only shapes data, it doesn't decide who may see it.
+// listAssets/listVersions expect the caller to have checked access already
+// (getProjectAccess / getAssetAccess); they only shape data.
 
 export type AssetListItem = Awaited<ReturnType<typeof listAssets>>[number];
 
@@ -76,4 +78,46 @@ export async function listAssets(projectId: string, params: ListParams) {
       return { ...asset, latest: version, posterUrl: posterKey ? await presignGetUrl(posterKey) : null };
     }),
   );
+}
+
+// --- Asset page ---
+
+// Access to one asset = access to its project (same rule, same 404 on failure).
+export async function getAssetAccess(userId: string, assetId: unknown) {
+  if (!isUuid(assetId)) return null;
+  const [asset] = await getDb()
+    .select({ id: assets.id, name: assets.name, kind: assets.kind, status: assets.status, projectId: assets.projectId })
+    .from(assets)
+    .where(eq(assets.id, assetId))
+    .limit(1);
+  if (!asset) return null;
+  const access = await getProjectAccess(userId, asset.projectId);
+  return access && { ...access, asset };
+}
+
+export type AssetVersion = Awaited<ReturnType<typeof listVersions>>[number];
+
+// The version stack, newest first. Storage keys stay on the server: the page
+// gets short-lived URLs for them (see player/playback.ts).
+export async function listVersions(assetId: string) {
+  return getDb()
+    .select({
+      id: assetVersions.id,
+      number: assetVersions.number,
+      createdAt: assetVersions.createdAt,
+      uploadedBy: users.name,
+      size: assetVersions.originalSize,
+      mime: assetVersions.originalMime,
+      processingState: assetVersions.processingState,
+      processingProgress: assetVersions.processingProgress,
+      processingError: assetVersions.processingError,
+      width: assetVersions.width,
+      height: assetVersions.height,
+      fps: assetVersions.fps,
+      durationMs: assetVersions.durationMs,
+    })
+    .from(assetVersions)
+    .innerJoin(users, eq(users.id, assetVersions.uploadedBy))
+    .where(eq(assetVersions.assetId, assetId))
+    .orderBy(desc(assetVersions.number));
 }
