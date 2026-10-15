@@ -18,6 +18,7 @@ export async function listAssets(projectId: string, params: ListParams) {
   // project's assets so Postgres doesn't scan every version in the system.
   const latest = db
     .selectDistinctOn([assetVersions.assetId], {
+      id: assetVersions.id,
       assetId: assetVersions.assetId,
       number: assetVersions.number,
       processingState: assetVersions.processingState,
@@ -52,6 +53,7 @@ export async function listAssets(projectId: string, params: ListParams) {
       createdAt: assets.createdAt,
       updatedAt: assets.updatedAt,
       latest: {
+        id: latest.id,
         number: latest.number,
         processingState: latest.processingState,
         processingProgress: latest.processingProgress,

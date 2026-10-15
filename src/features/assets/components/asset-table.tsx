@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { ProcessingBadge } from "@/features/processing/components/processing-badge";
 import { formatBytes } from "@/lib/format";
 import { sortHref, type ListParams } from "../list-params";
 import type { AssetListItem } from "../queries";
-import { ProcessingBadge, StatusBadge } from "./badges";
+import { StatusBadge } from "./badges";
 import { NewVersionButton } from "./new-version-button";
 
 type Props = { projectId: string; params: ListParams; assets: AssetListItem[]; canUpload: boolean };
@@ -46,9 +47,13 @@ export function AssetTable({ projectId, params, assets, canUpload }: Props) {
                 <div className="flex flex-col items-start gap-1">
                   <StatusBadge status={asset.status} />
                   <ProcessingBadge
-                    state={asset.latest.processingState}
-                    progress={asset.latest.processingProgress}
-                    error={asset.latest.processingError}
+                    versionId={asset.latest.id}
+                    initial={{
+                      state: asset.latest.processingState,
+                      progress: asset.latest.processingProgress,
+                      error: asset.latest.processingError,
+                    }}
+                    canRetry={canUpload}
                   />
                 </div>
               </td>

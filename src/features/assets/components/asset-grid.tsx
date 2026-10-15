@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ProcessingBadge } from "@/features/processing/components/processing-badge";
 import { formatDuration } from "@/lib/format";
 import type { AssetListItem } from "../queries";
-import { ProcessingBadge, StatusBadge } from "./badges";
+import { StatusBadge } from "./badges";
 import { NewVersionButton } from "./new-version-button";
 
 type Props = { projectId: string; assets: AssetListItem[]; canUpload: boolean };
@@ -39,9 +40,13 @@ export function AssetGrid({ projectId, assets, canUpload }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={asset.status} />
               <ProcessingBadge
-                state={asset.latest.processingState}
-                progress={asset.latest.processingProgress}
-                error={asset.latest.processingError}
+                versionId={asset.latest.id}
+                initial={{
+                  state: asset.latest.processingState,
+                  progress: asset.latest.processingProgress,
+                  error: asset.latest.processingError,
+                }}
+                canRetry={canUpload}
               />
             </div>
             {canUpload && <NewVersionButton projectId={projectId} assetId={asset.id} kind={asset.kind} />}

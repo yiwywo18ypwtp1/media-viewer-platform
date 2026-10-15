@@ -7,6 +7,7 @@ import { ListToolbar } from "@/features/assets/components/list-toolbar";
 import { parseListParams } from "@/features/assets/list-params";
 import { listAssets } from "@/features/assets/queries";
 import { Uploader } from "@/features/uploads/components/uploader";
+import { ProjectEvents } from "@/features/processing/components/project-events";
 import { getProjectAccess } from "@/features/workspaces/queries";
 import { can } from "@/features/workspaces/roles";
 
@@ -34,15 +35,18 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
 
       <ListToolbar projectId={projectId} params={listParams} />
 
-      {assets.length === 0 ? (
-        <p className="text-sm text-neutral-500">
-          {listParams.status === "all" ? "No assets yet." : "No assets match this filter."}
-        </p>
-      ) : listParams.view === "grid" ? (
-        <AssetGrid projectId={projectId} assets={assets} canUpload={canUpload} />
-      ) : (
-        <AssetTable projectId={projectId} params={listParams} assets={assets} canUpload={canUpload} />
-      )}
+      {/* Live processing progress over SSE; the list itself stays server-rendered. */}
+      <ProjectEvents projectId={projectId}>
+        {assets.length === 0 ? (
+          <p className="text-sm text-neutral-500">
+            {listParams.status === "all" ? "No assets yet." : "No assets match this filter."}
+          </p>
+        ) : listParams.view === "grid" ? (
+          <AssetGrid projectId={projectId} assets={assets} canUpload={canUpload} />
+        ) : (
+          <AssetTable projectId={projectId} params={listParams} assets={assets} canUpload={canUpload} />
+        )}
+      </ProjectEvents>
     </div>
   );
 }
