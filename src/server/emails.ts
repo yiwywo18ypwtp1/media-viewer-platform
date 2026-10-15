@@ -16,3 +16,24 @@ export function passwordResetEmail(input: { to: string; name: string; url: strin
     ].join("\n"),
   };
 }
+
+export function invitationEmail(input: {
+  to: string;
+  workspaceName: string;
+  inviterName: string;
+  role: string;
+  url: string;
+}): EmailJob {
+  return {
+    to: input.to,
+    subject: `${input.inviterName} invited you to ${input.workspaceName}`,
+    text: [
+      `${input.inviterName} invited you to join "${input.workspaceName}" on Media Review Hub as ${input.role}.`,
+      "",
+      "Accept the invitation (you can create an account from the same link):",
+      input.url,
+      "",
+      "The link expires in 7 days.",
+    ].join("\n"),
+  };
+}

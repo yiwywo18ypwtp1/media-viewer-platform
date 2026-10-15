@@ -73,9 +73,13 @@ export async function login(values: unknown, next: unknown): Promise<ActionResul
   redirect(safeNextPath(next));
 }
 
-export async function logout() {
+// `next` is bound by pages that want the user to come back after signing in
+// again (the invite page). A plain <form action={logout}> passes FormData here
+// instead, which safeNextPath turns into the default.
+export async function logout(next?: unknown) {
   await deleteCurrentSession();
-  redirect("/login");
+  const path = safeNextPath(next);
+  redirect(path === "/" ? "/login" : `/login?next=${encodeURIComponent(path)}`);
 }
 
 export async function requestPasswordReset(values: unknown): Promise<ActionResult> {
