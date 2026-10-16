@@ -71,7 +71,7 @@ jobs:
           test "$size" -le 250000000
 
       - name: Integration tests (real Postgres, Redis, MinIO)
-        run: docker compose --profile integration run --rm --no-build integration
+        run: docker compose --profile integration run --rm integration
 
       - name: E2E (compose profile)
         run: |
@@ -81,7 +81,9 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose --profile e2e logs --no-color > e2e-results/compose.log
+        run: |
+          mkdir -p e2e-results
+          docker compose --profile e2e --profile integration logs --no-color > e2e-results/compose.log
 
       - uses: actions/upload-artifact@v4
         if: failure()
