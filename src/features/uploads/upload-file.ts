@@ -45,7 +45,7 @@ type Part = {
 };
 
 const PARALLEL_PARTS = 4;
-const MAX_PART_ATTEMPTS = 5; // backoff 1+2+4+8 s: survives a ~15-20 s network drop
+const MAX_PART_ATTEMPTS = 6; // backoff 1+2+4+8+16 s: rides out a ~30 s network drop
 const URL_BATCH_SIZE = 20;
 const PROGRESS_EMIT_MS = 250; // XHR progress fires far more often than the UI needs
 const STALL_TIMEOUT_MS = 30_000;
