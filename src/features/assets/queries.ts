@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getProjectAccess } from "@/features/workspaces/queries";
 import { isUuid } from "@/lib/ids";
 import { getDb } from "@/server/db";
@@ -67,7 +67,14 @@ export async function listAssets(projectId: string, params: ListParams) {
     })
     .from(assets)
     .innerJoin(latest, eq(latest.assetId, assets.id))
-    .where(and(eq(assets.projectId, projectId), params.status === "all" ? undefined : eq(assets.status, params.status)))
+    .where(
+      and(
+        eq(assets.projectId, projectId),
+        // The open folder only; its subfolders are listed as folders.
+        params.folder ? eq(assets.folderId, params.folder) : isNull(assets.folderId),
+        params.status === "all" ? undefined : eq(assets.status, params.status),
+      ),
+    )
     // id as tie-breaker keeps the order stable between reloads.
     .orderBy(params.dir === "asc" ? asc(sortColumn) : desc(sortColumn), asc(assets.id));
 
@@ -86,7 +93,14 @@ export async function listAssets(projectId: string, params: ListParams) {
 export async function getAssetAccess(userId: string, assetId: unknown) {
   if (!isUuid(assetId)) return null;
   const [asset] = await getDb()
-    .select({ id: assets.id, name: assets.name, kind: assets.kind, status: assets.status, projectId: assets.projectId })
+    .select({
+      id: assets.id,
+      name: assets.name,
+      kind: assets.kind,
+      status: assets.status,
+      projectId: assets.projectId,
+      folderId: assets.folderId,
+    })
     .from(assets)
     .where(eq(assets.id, assetId))
     .limit(1);

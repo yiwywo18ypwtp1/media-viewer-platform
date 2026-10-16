@@ -132,6 +132,23 @@ export const assetStatus = pgEnum("asset_status", ["in_review", "changes_request
 export const processingState = pgEnum("processing_state", ["pending", "running", "ready", "failed"]);
 export const uploadStatus = pgEnum("upload_status", ["uploading", "completed", "aborted"]);
 
+// A folder tree inside a project. parent_id null = top level. Names are unique
+// among siblings (NULLS NOT DISTINCT: also at the top level), which is what
+// lets a dropped folder find or create "the same" folder on the next upload.
+export const folders = pgTable(
+  "folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    parentId: uuid("parent_id").references((): AnyPgColumn => folders.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [unique("folders_sibling_name").on(table.projectId, table.parentId, table.name).nullsNotDistinct()],
+);
+
 export const assets = pgTable(
   "assets",
   {
@@ -139,6 +156,8 @@ export const assets = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    // null = top level of the project.
+    folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
     name: text("name").notNull(),
     kind: assetKind("kind").notNull(),
     status: assetStatus("status").notNull().default("in_review"),
@@ -146,7 +165,7 @@ export const assets = pgTable(
     // Bumped when a new version lands; the asset list sorts by it.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("assets_project_id_idx").on(table.projectId)],
+  (table) => [index("assets_project_id_idx").on(table.projectId), index("assets_folder_id_idx").on(table.folderId)],
 );
 
 // One row per uploaded file: v1, v2, v3... of an asset.
@@ -201,6 +220,8 @@ export const uploads = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     // Set when uploading a new version of an existing asset.
     assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }),
+    // Where a new asset lands (resolved from the dropped folder path at create).
+    folderId: uuid("folder_id").references(() => folders.id, { onDelete: "set null" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/features/auth/session";
 import { StatusBadge } from "@/features/assets/components/badges";
 import { getAssetAccess, listVersions } from "@/features/assets/queries";
+import { MoveAssetSelect } from "@/features/folders/components/move-asset-select";
+import { folderTrail, listFolderPaths } from "@/features/folders/queries";
 import { ReviewWorkspace } from "@/features/comments/components/review-workspace";
 import { listComments, listMarkers } from "@/features/comments/server";
 import { getPlaybackUrls } from "@/features/player/playback";
@@ -27,12 +29,15 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
   const requested = Number((await searchParams).v);
   const version = versions.find((v) => v.number === requested) ?? versions[0];
 
-  const [urls, firstPage, markers, members, review] = await Promise.all([
+  const canEdit = can(role, "upload");
+  const [urls, firstPage, markers, members, review, trail, folderPaths] = await Promise.all([
     version.processingState === "ready" ? getPlaybackUrls(asset.id, version.id) : null,
     listComments(version.id, null),
     listMarkers(version.id),
     listMembers(workspace.id),
     getLatestReview(asset.id),
+    asset.folderId ? folderTrail(asset.folderId) : [],
+    canEdit ? listFolderPaths(project.id) : [],
   ]);
 
   // Shown instead of the player for images and versions still processing.
@@ -48,7 +53,7 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
       <ProcessingBadge
         versionId={version.id}
         initial={{ state: version.processingState, progress: version.processingProgress, error: version.processingError }}
-        canRetry={can(role, "upload")}
+        canRetry={canEdit}
       />
     </div>
   );
@@ -73,12 +78,23 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
             <Link href={`/p/${project.id}`} className="hover:underline">
               {project.name}
             </Link>
+            {trail.map((folder) => (
+              <span key={folder.id}>
+                {" / "}
+                <Link href={`/p/${project.id}?folder=${folder.id}`} className="hover:underline">
+                  {folder.name}
+                </Link>
+              </span>
+            ))}
           </p>
           <h1 className="flex items-center gap-3 text-2xl font-semibold">
             {asset.name}
             <StatusBadge status={asset.status} />
           </h1>
           <p className="text-xs text-neutral-500">{facts.join(" · ")}</p>
+          {canEdit && folderPaths.length > 0 && (
+            <MoveAssetSelect assetId={asset.id} folderId={asset.folderId} folders={folderPaths} />
+          )}
         </div>
         <nav aria-label="Versions" className="flex flex-wrap gap-1 text-sm">
           {versions.map((v) => (

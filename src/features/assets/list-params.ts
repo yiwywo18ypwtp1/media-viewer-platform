@@ -13,6 +13,8 @@ export type ListParams = {
   sort: (typeof SORTS)[number];
   dir: "asc" | "desc";
   status: (typeof STATUS_FILTERS)[number];
+  // The open folder; null = top level of the project.
+  folder: string | null;
 };
 
 // Newest first for dates, A→Z for names.
@@ -28,6 +30,8 @@ const schema = z.object({
   sort: z.enum(SORTS).catch("updated"),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   status: z.enum(STATUS_FILTERS).catch("all"),
+  // Only the shape is checked here; the page checks it belongs to the project.
+  folder: z.uuid().nullable().catch(null),
 });
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -39,6 +43,7 @@ export function parseListParams(searchParams: SearchParams): ListParams {
     sort: first(searchParams.sort),
     dir: first(searchParams.dir),
     status: first(searchParams.status),
+    folder: first(searchParams.folder) ?? null,
   });
   return { ...raw, dir: raw.dir ?? DEFAULT_DIR[raw.sort] };
 }
@@ -55,6 +60,7 @@ export function listHref(projectId: string, current: ListParams, change: Partial
   if (next.sort !== "updated") query.set("sort", next.sort);
   if (next.dir !== DEFAULT_DIR[next.sort]) query.set("dir", next.dir);
   if (next.status !== "all") query.set("status", next.status);
+  if (next.folder) query.set("folder", next.folder);
 
   const search = query.toString();
   return `/p/${projectId}${search ? `?${search}` : ""}`;
