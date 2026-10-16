@@ -23,6 +23,7 @@ import { getEnv } from "@/server/env";
 import { logger } from "@/server/logger";
 import { getRequestId, requestLogger } from "@/server/request-log";
 import { getMediaQueue } from "@/server/queues";
+import { inSpan, traceCarrier } from "@/server/tracing";
 import { getPresignS3, getS3 } from "@/server/s3";
 import { assets, assetVersions, reviewRequests, uploads } from "@/server/schema";
 import {
@@ -304,10 +305,9 @@ export async function completeUpload(
   if (result.created) {
     (await requestLogger()).info({ uploadId, versionId: result.versionId }, "upload completed, version created");
     try {
-      await getMediaQueue().add(
-        "process",
-        { versionId: result.versionId, requestId: await getRequestId() },
-        { jobId: result.versionId },
+      const requestId = await getRequestId();
+      await inSpan("enqueue media job", { "version.id": result.versionId }, () =>
+        getMediaQueue().add("process", { versionId: result.versionId, requestId, trace: traceCarrier() }, { jobId: result.versionId }),
       );
     } catch (error) {
       // The version is saved as "pending"; the worker's sweeper re-enqueues

@@ -1,6 +1,7 @@
 import { getEnv } from "./server/env";
 import { closeAllStreams, connectEventHub } from "./server/event-hub";
 import { getRedis } from "./server/redis";
+import { startTracing } from "./server/tracing";
 
 try {
   getEnv();
@@ -10,6 +11,9 @@ try {
   process.exit(1);
 }
 
+// Traces to Jaeger when OTEL_EXPORTER_OTLP_ENDPOINT is set (profile "observability").
+const tracing = startTracing("web");
+
 // Connect eagerly: the Redis client fails fast while not connected, so a lazy
 // connection would make the first request after startup fail.
 getRedis();
@@ -17,4 +21,8 @@ connectEventHub();
 
 // Next's own SIGTERM handler waits for open requests before exiting. SSE
 // streams never end on their own, so end them; browsers reconnect by themselves.
-process.once("SIGTERM", closeAllStreams);
+process.once("SIGTERM", () => {
+  closeAllStreams();
+  // Send the spans still in the batch before the process goes.
+  void tracing?.shutdown();
+});

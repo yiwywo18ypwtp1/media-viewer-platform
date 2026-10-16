@@ -16,6 +16,7 @@ import { projectChannel, type ProcessingEvent } from "../../src/server/realtime"
 import * as schema from "../../src/server/schema";
 import { planSprite, type SpriteInfo } from "../../src/features/player/sprite";
 import { ffmpeg, probe, type MediaInfo } from "../ffmpeg";
+import { inSpan, withTraceFrom } from "../../src/server/tracing";
 import { contentTypeOf, HLS_DIR, hlsArgs, mp4FromHlsArgs, spriteArgs } from "../renditions";
 
 // One job = one asset version: verify the original, read its metadata, render
@@ -45,7 +46,13 @@ type Rendered = { files: string[]; sprite?: SpriteInfo };
 export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
   const { assetVersions, assets } = schema;
 
-  return async function processMedia(job: Job<MediaJob>) {
+  // The job runs inside the trace of the request that queued it (if any).
+  return (job: Job<MediaJob>) =>
+    withTraceFrom(job.data.trace, () =>
+      inSpan("process media", { "version.id": job.data.versionId, "job.attempt": job.attemptsMade + 1 }, () => processMedia(job)),
+    );
+
+  async function processMedia(job: Job<MediaJob>) {
     const { versionId } = job.data;
     const [version] = await db
       .select({
@@ -104,23 +111,24 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
     const dir = await mkdtemp(join(tmpdir(), `version-${versionId}-`));
     try {
       const input = join(dir, "original");
-      await downloadAndVerify(input, version, signal);
+      await inSpan("download and verify", { "file.size": version.originalSize }, () => downloadAndVerify(input, version, signal));
 
-      const info = await probe(input, signal);
+      const info = await inSpan("ffprobe", {}, () => probe(input, signal));
       if (info.kind !== version.kind) {
         throw new UnrecoverableError(`Expected ${version.kind === "video" ? "a video" : "an image"}, got ${info.kind === "video" ? "a video" : "an image"}.`);
       }
 
-      const rendered =
+      const rendered = await inSpan(info.kind === "video" ? "render video" : "render image", { "media.kind": info.kind }, () =>
         info.kind === "video"
-          ? await renderVideo(input, dir, info, signal, (progress) => {
+          ? renderVideo(input, dir, info, signal, (progress) => {
               void reportProgress(progress).catch((error) => jobLog.warn({ err: error }, "progress report failed"));
             })
-          : await renderImage(input, dir, signal);
+          : renderImage(input, dir, signal),
+      );
 
       const keys: Record<string, string> = {};
       for (const name of rendered.files) keys[name] = `versions/${versionId}/${name}`;
-      await putFiles(dir, keys, signal);
+      await inSpan("store renditions", { "files.count": rendered.files.length }, () => putFiles(dir, keys, signal));
 
       await update({
         state: "ready",
@@ -157,7 +165,7 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  };
+  }
 
   // Streams the original to disk and hashes it in the same pass: one read of
   // the file, constant memory, even for 5 GB. This is where the browser's

@@ -1,4 +1,5 @@
 import type { DefaultJobOptions } from "bullmq";
+import type { TraceCarrier } from "./tracing";
 
 // Queue names, job payloads and job options shared by web (producer) and
 // worker (consumer, and producer for re-enqueued jobs). Kept free of
@@ -25,7 +26,9 @@ export const MEDIA_QUEUE = "media";
 // jobId is the versionId, so enqueueing the same version twice is a no-op.
 // requestId: the upload's "complete" request, so its log lines and the
 // worker's can be matched (absent when the sweeper re-enqueues).
-export type MediaJob = { versionId: string; requestId?: string };
+// trace: the OpenTelemetry context of that request, so the worker's spans
+// join the same trace.
+export type MediaJob = { versionId: string; requestId?: string; trace?: TraceCarrier };
 
 export const MEDIA_JOB_OPTIONS: DefaultJobOptions = {
   // Task 3.3: at most 3 attempts with exponential backoff (10 s, 20 s).

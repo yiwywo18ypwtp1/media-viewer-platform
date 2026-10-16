@@ -9,6 +9,7 @@ import { EMAIL_QUEUE, MAINTENANCE_QUEUE, MEDIA_QUEUE, type MediaJob } from "../s
 import { createLogger } from "../src/server/logger";
 import { createS3Client } from "../src/server/s3-client";
 import * as schema from "../src/server/schema";
+import { startTracing } from "../src/server/tracing";
 import { createCleanupUploads } from "./jobs/cleanup-uploads";
 import { createProcessMedia } from "./jobs/process-media";
 import { createReviewReminder } from "./jobs/review-reminder";
@@ -32,6 +33,9 @@ function loadEnv(): WorkerEnv {
 
 async function main() {
   const env = loadEnv();
+  // Traces to Jaeger when OTEL_EXPORTER_OTLP_ENDPOINT is set; media jobs
+  // continue the trace of the request that queued them.
+  const tracing = startTracing("worker");
   // BullMQ workers block on Redis and must retry forever, hence `null`.
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   redis.on("error", (error) => log.warn({ err: error }, "redis connection error"));
@@ -99,6 +103,7 @@ async function main() {
     await Promise.all([maintenance.close(), mediaQueue.close()]);
     await redis.quit();
     await sql.end();
+    await tracing?.shutdown();
     log.info("shutdown complete");
     process.exit(0);
   }

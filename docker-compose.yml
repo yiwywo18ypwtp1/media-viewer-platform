@@ -127,6 +127,16 @@ services:
       timeout: 3s
       retries: 10
 
+  # Traces (OpenTelemetry) from web and worker, viewed at http://localhost:16686.
+  # Enabled with the profile and OTEL_EXPORTER_OTLP_ENDPOINT in .env:
+  #   docker compose --profile observability up
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/jaeger:2.22.0
+    restart: unless-stopped
+    # 16686: web UI. OTLP over HTTP (4318) is only used inside the network.
+    ports: ["16686:16686"]
+
   # Integration tests (Vitest) against the real Postgres, Redis and MinIO:
   #   docker compose --profile integration run --rm integration
   integration:
