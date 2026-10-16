@@ -5,7 +5,7 @@ import { UnrecoverableError } from "bullmq";
 // helpers they need (unit-tested in ffmpeg.test.ts).
 
 export type MediaInfo =
-  | { kind: "video"; durationMs: number; width: number; height: number; fps: number | null }
+  | { kind: "video"; durationMs: number; width: number; height: number; fps: number | null; hasAudio: boolean }
   | { kind: "image"; width: number; height: number };
 
 type ProbeJson = {
@@ -40,6 +40,7 @@ export function parseProbe(json: ProbeJson): MediaInfo | null {
     width: video.width,
     height: video.height,
     fps: parseFps(video.avg_frame_rate) ?? parseFps(video.r_frame_rate),
+    hasAudio: json.streams?.some((stream) => stream.codec_type === "audio") ?? false,
   };
 }
 

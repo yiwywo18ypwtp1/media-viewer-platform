@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -14,10 +14,13 @@ import type { Logger } from "pino";
 import type { MediaJob } from "../../src/server/jobs";
 import { projectChannel, type ProcessingEvent } from "../../src/server/realtime";
 import * as schema from "../../src/server/schema";
+import { planSprite, type SpriteInfo } from "../../src/features/player/sprite";
 import { ffmpeg, probe, type MediaInfo } from "../ffmpeg";
+import { contentTypeOf, HLS_DIR, hlsArgs, mp4FromHlsArgs, spriteArgs } from "../renditions";
 
 // One job = one asset version: verify the original, read its metadata, render
-// what the browser needs (poster + 720p MP4, or WebP previews), store it.
+// what the browser needs (poster, HLS 720p/360p, 720p MP4 and a thumbnail
+// sprite; or WebP previews for images), store it.
 //
 // Idempotent: outputs go to fixed keys (versions/<id>/...), so a re-run
 // overwrites the same objects and updates the same row instead of adding new
@@ -25,6 +28,7 @@ import { ffmpeg, probe, type MediaInfo } from "../ffmpeg";
 
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
 const DB_PROGRESS_STEP = 5; // write progress to Postgres every 5%; Redis gets every change
+const UPLOAD_CONCURRENCY = 8; // HLS is hundreds of small files
 
 type Deps = {
   db: PostgresJsDatabase<typeof schema>;
@@ -34,7 +38,9 @@ type Deps = {
   log: Logger;
 };
 
-type Output = { name: string; contentType: string };
+// Files to store, by path relative to the work dir (= relative to the
+// version's prefix in S3).
+type Rendered = { files: string[]; sprite?: SpriteInfo };
 
 export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
   const { assetVersions, assets } = schema;
@@ -105,7 +111,7 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
         throw new UnrecoverableError(`Expected ${version.kind === "video" ? "a video" : "an image"}, got ${info.kind === "video" ? "a video" : "an image"}.`);
       }
 
-      const outputs =
+      const rendered =
         info.kind === "video"
           ? await renderVideo(input, dir, info, signal, (progress) => {
               void reportProgress(progress).catch((error) => jobLog.warn({ err: error }, "progress report failed"));
@@ -113,10 +119,8 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
           : await renderImage(input, dir, signal);
 
       const keys: Record<string, string> = {};
-      for (const output of outputs) {
-        keys[output.name] = `versions/${versionId}/${output.name}`;
-        await putFile(join(dir, output.name), keys[output.name], output.contentType);
-      }
+      for (const name of rendered.files) keys[name] = `versions/${versionId}/${name}`;
+      await putFiles(dir, keys, signal);
 
       await update({
         state: "ready",
@@ -127,6 +131,8 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
         posterKey: keys["poster.jpg"] ?? keys["thumb.webp"],
         mp4Key: keys["720p.mp4"] ?? null,
         previewKey: keys["preview.webp"] ?? null,
+        hlsKey: keys[`${HLS_DIR}/master.m3u8`] ?? null,
+        sprite: rendered.sprite ? { ...rendered.sprite, key: keys["sprite.jpg"] } : null,
         width: info.width,
         height: info.height,
         durationMs: info.kind === "video" ? info.durationMs : null,
@@ -184,17 +190,28 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
     }
   }
 
-  async function putFile(path: string, key: string, contentType: string) {
-    const { size } = await stat(path);
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: createReadStream(path),
-        ContentLength: size,
-        ContentType: contentType,
-      }),
-    );
+  // A few uploads at a time: sequential would crawl through hundreds of
+  // segments, all at once would open hundreds of sockets.
+  async function putFiles(dir: string, keys: Record<string, string>, signal: AbortSignal) {
+    const queue = Object.entries(keys);
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        const [name, key] = next;
+        const path = join(dir, name);
+        const { size } = await stat(path);
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: createReadStream(path),
+            ContentLength: size,
+            ContentType: contentTypeOf(name),
+          }),
+          { abortSignal: signal },
+        );
+      }
+    };
+    await Promise.all(Array.from({ length: UPLOAD_CONCURRENCY }, worker));
   }
 }
 
@@ -213,7 +230,7 @@ async function renderVideo(
   info: Extract<MediaInfo, { kind: "video" }>,
   signal: AbortSignal,
   onProgress: (percent: number) => void,
-): Promise<Output[]> {
+): Promise<Rendered> {
   // Never upscale: min(720, source height); -2 keeps the width even (H.264 needs it).
   const scale = "scale=-2:'min(720,ih)'";
   // 1 s in skips black first frames; very short clips use their middle.
@@ -222,39 +239,31 @@ async function renderVideo(
   await ffmpeg(["-ss", posterAt, "-i", input, "-frames:v", "1", "-vf", scale, "-q:v", "3", join(dir, "poster.jpg")], {
     signal,
   });
-  await ffmpeg(
-    [
-      "-i", input,
-      "-vf", scale,
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-      "-c:a", "aac", "-b:a", "128k",
-      // moov atom at the start: playback can begin before the whole file loads.
-      "-movflags", "+faststart",
-      join(dir, "720p.mp4"),
-    ],
-    {
-      signal,
-      // 0-99 while encoding; 100 is set only once everything is stored.
-      onPositionMs: (positionMs) => onProgress(Math.min(99, Math.floor((positionMs / info.durationMs) * 100))),
-    },
-  );
+  // The one real encode (both qualities): 0-90% of the progress bar.
+  await ffmpeg(hlsArgs(input, dir, info.hasAudio), {
+    signal,
+    onPositionMs: (positionMs) => onProgress(Math.min(90, Math.floor((positionMs / info.durationMs) * 90))),
+  });
+  await ffmpeg(mp4FromHlsArgs(dir, info.hasAudio, join(dir, "720p.mp4")), { signal });
+  onProgress(93);
+  const sprite = planSprite(info.durationMs, info.width, info.height);
+  await ffmpeg(spriteArgs(input, join(dir, "sprite.jpg"), sprite), { signal });
+  // 100 is set only once everything is stored.
+  onProgress(95);
 
-  return [
-    { name: "poster.jpg", contentType: "image/jpeg" },
-    { name: "720p.mp4", contentType: "video/mp4" },
-  ];
+  const hlsFiles = (await readdir(join(dir, HLS_DIR), { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name).slice(dir.length + 1));
+  return { files: ["poster.jpg", "720p.mp4", "sprite.jpg", ...hlsFiles], sprite };
 }
 
 // Two WebP sizes: a thumbnail for lists and a large preview for viewing.
-async function renderImage(input: string, dir: string, signal: AbortSignal): Promise<Output[]> {
+async function renderImage(input: string, dir: string, signal: AbortSignal): Promise<Rendered> {
   for (const [name, maxWidth] of [["thumb.webp", 640], ["preview.webp", 1920]] as const) {
     await ffmpeg(
       ["-i", input, "-frames:v", "1", "-vf", `scale='min(${maxWidth},iw)':-2`, "-c:v", "libwebp", "-quality", "82", join(dir, name)],
       { signal },
     );
   }
-  return [
-    { name: "thumb.webp", contentType: "image/webp" },
-    { name: "preview.webp", contentType: "image/webp" },
-  ];
+  return { files: ["thumb.webp", "preview.webp"] };
 }

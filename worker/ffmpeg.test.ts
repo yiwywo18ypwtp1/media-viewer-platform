@@ -26,7 +26,15 @@ describe("parseProbe", () => {
         ],
         format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "12.000000" },
       }),
-    ).toEqual({ kind: "video", durationMs: 12000, width: 1920, height: 1080, fps: 30000 / 1001 });
+    ).toEqual({ kind: "video", durationMs: 12000, width: 1920, height: 1080, fps: 30000 / 1001, hasAudio: true });
+  });
+
+  it("notes a video without sound (HLS then has no audio group)", () => {
+    const info = parseProbe({
+      streams: [{ codec_type: "video", width: 640, height: 360, avg_frame_rate: "25/1" }],
+      format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "3.000000" },
+    });
+    expect(info).toMatchObject({ kind: "video", hasAudio: false });
   });
 
   it("reads an image by its demuxer, not its MIME type", () => {

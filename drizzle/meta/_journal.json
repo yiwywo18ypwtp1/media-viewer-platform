@@ -64,6 +64,13 @@
       "when": 1792142608067,
       "tag": "0008_folders",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792143282860,
+      "tag": "0009_hls_sprite",
+      "breakpoints": true
     }
   ]
 }

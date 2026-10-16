@@ -17,6 +17,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { Shape } from "../features/annotations/schema";
+import type { SpriteInfo } from "../features/player/sprite";
 import type { Step } from "../features/reviews/rules";
 import { ROLES } from "../features/workspaces/roles";
 
@@ -200,6 +201,10 @@ export const assetVersions = pgTable(
     posterKey: text("poster_key"),
     mp4Key: text("mp4_key"),
     previewKey: text("preview_key"),
+    // Video: master playlist of the HLS renditions (720p + 360p).
+    hlsKey: text("hls_key"),
+    // Video: scrubbing thumbnails in one JPEG, with the grid geometry.
+    sprite: jsonb("sprite").$type<SpriteInfo & { key: string }>(),
 
     durationMs: integer("duration_ms"),
     width: integer("width"),
