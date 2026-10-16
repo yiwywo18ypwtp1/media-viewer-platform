@@ -26,7 +26,8 @@ jobs:
       - run: npm test
 
   # Builds the images (with the layer cache kept in GitHub's cache), checks the
-  # web image size, then runs the e2e profile against the full stack.
+  # web image size, then runs the integration tests and the e2e profile
+  # against the full stack.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -42,12 +43,13 @@ jobs:
         with:
           source: .
           files: docker-compose.yml
-          targets: web,worker,migrate,e2e
+          targets: web,worker,migrate,integration,e2e
           load: true
           set: |
             web.tags=media-review-hub-web
             worker.tags=media-review-hub-worker
             migrate.tags=media-review-hub-migrate
+            integration.tags=media-review-hub-integration
             e2e.tags=media-review-hub-e2e
             web.cache-from=type=gha,scope=web
             web.cache-to=type=gha,scope=web,mode=max
@@ -55,6 +57,8 @@ jobs:
             worker.cache-to=type=gha,scope=worker,mode=max
             migrate.cache-from=type=gha,scope=migrate
             migrate.cache-to=type=gha,scope=migrate,mode=max
+            integration.cache-from=type=gha,scope=integration
+            integration.cache-to=type=gha,scope=integration,mode=max
             e2e.cache-from=type=gha,scope=e2e
             e2e.cache-to=type=gha,scope=e2e,mode=max
 
@@ -64,9 +68,13 @@ jobs:
           echo "web image: $((size / 1000000)) MB"
           test "$size" -le 250000000
 
+      - run: cp .env.example .env
+
+      - name: Integration tests (real Postgres, Redis, MinIO)
+        run: docker compose --profile integration run --rm --no-build integration
+
       - name: E2E (compose profile)
         run: |
-          cp .env.example .env
           # The test container runs as an unprivileged user; let it write the report.
           mkdir -p e2e-results && chmod 777 e2e-results
           docker compose --profile e2e up --no-build --abort-on-container-exit --exit-code-from e2e

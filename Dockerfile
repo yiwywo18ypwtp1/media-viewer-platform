@@ -21,6 +21,12 @@ FROM deps AS build
 COPY --chown=node:node . .
 RUN npm run build && npm run build:worker
 
+# --- Integration tests: sources + dev dependencies, run against the compose
+# services (compose profile "integration"). Not a runtime image. ---
+FROM deps AS test
+COPY --chown=node:node . .
+CMD ["npm", "run", "test:integration"]
+
 # --- Dev: full sources are bind-mounted by docker-compose.dev.yml. ---
 FROM deps AS dev
 USER root

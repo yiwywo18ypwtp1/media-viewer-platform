@@ -127,6 +127,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # Integration tests (Vitest) against the real Postgres, Redis and MinIO:
+  #   docker compose --profile integration run --rm integration
+  integration:
+    profiles: [integration]
+    build: { context: ., target: test }
+    env_file: .env
+    environment:
+      # The tests PUT parts to presigned URLs themselves, from inside the network.
+      S3_PUBLIC_ENDPOINT: http://minio:9000
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      minio-init: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   # Playwright tests in a container against this stack:
   #   docker compose --profile e2e up --build --abort-on-container-exit --exit-code-from e2e
   e2e:
