@@ -21,6 +21,8 @@ export function useVideoSource(videoRef: RefObject<HTMLVideoElement | null>, url
   const [quality, setQualityState] = useState(AUTO_QUALITY);
   // Set when HLS failed beyond repair: play the MP4 instead.
   const [hlsFailed, setHlsFailed] = useState(false);
+  // The server refused a segment: access is gone (e.g. a revoked share link).
+  const [denied, setDenied] = useState(false);
   const useHls = Boolean(urls.hlsUrl) && !hlsFailed;
 
   useEffect(() => {
@@ -45,7 +47,10 @@ export function useVideoSource(videoRef: RefObject<HTMLVideoElement | null>, url
         else setHlsFailed(true);
         return;
       }
-      const hls = new HlsClass({ enableWorker: true });
+      // At most 30 s ahead. hls.js otherwise sizes the buffer by bytes, and a
+      // light video would be fetched whole up front: then access checks on
+      // later segments (a revoked share link) would never get a say.
+      const hls = new HlsClass({ enableWorker: true, maxBufferLength: 30, maxMaxBufferLength: 30 });
       hlsRef.current = hls;
       hls.on(HlsClass.Events.MANIFEST_PARSED, (_event, data) => {
         setQualities(
@@ -58,6 +63,12 @@ export function useVideoSource(videoRef: RefObject<HTMLVideoElement | null>, url
       // hls.js retries single failed segments itself; only fatal errors land here.
       hls.on(HlsClass.Events.ERROR, (_event, data) => {
         if (!data.fatal) return;
+        // Retrying a refusal won't help, and the MP4 would be refused too.
+        if ([401, 403, 404, 410].includes(data.response?.code ?? 0)) {
+          hls.stopLoad();
+          setDenied(true);
+          return;
+        }
         if (data.type === HlsClass.ErrorTypes.NETWORK_ERROR) hls.startLoad();
         else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
         else setHlsFailed(true);
@@ -81,5 +92,5 @@ export function useVideoSource(videoRef: RefObject<HTMLVideoElement | null>, url
     if (hlsRef.current) hlsRef.current.currentLevel = level;
   }
 
-  return { qualities, quality, setQuality, usingHls: useHls };
+  return { qualities, quality, setQuality, usingHls: useHls, denied };
 }

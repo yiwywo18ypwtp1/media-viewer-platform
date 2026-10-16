@@ -5,7 +5,8 @@ import { SESSION_COOKIE } from "@/features/auth/cookie";
 // the database. The real check (valid, unexpired session) is requireUser()
 // in the data layer, which every protected page and action goes through.
 
-const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/invite"];
+// /s/<token>: public share links; they check their own access (token, password).
+const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/invite", "/s"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -34,8 +35,9 @@ function handle(request: NextRequest, requestId: string): Response {
   // blocks most cross-site requests; this also covers same-site subdomains.
   // Compared with APP_URL, not request.nextUrl: inside Docker the server sees
   // its bind address (0.0.0.0:3000), not the address the browser used.
+  // Guest Route Handlers under /s/ (comments) are cookie-authenticated too.
   if (
-    pathname.startsWith("/api/") &&
+    (pathname.startsWith("/api/") || pathname.startsWith("/s/")) &&
     UNSAFE_METHODS.has(request.method) &&
     request.headers.get("origin") !== new URL(process.env.APP_URL!).origin
   ) {

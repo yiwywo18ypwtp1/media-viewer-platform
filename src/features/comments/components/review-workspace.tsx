@@ -74,8 +74,7 @@ function Workspace(props: Props) {
         {props.video ? (
           <Player
             key={props.versionId}
-            assetId={props.assetId}
-            versionId={props.versionId}
+            refreshUrl={`/api/assets/${props.assetId}/versions/${props.versionId}/playback`}
             initialUrls={props.video.urls}
             markers={comments.markers}
             onMarkerSelect={select}

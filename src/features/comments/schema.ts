@@ -52,7 +52,8 @@ export type CommentDto = {
   id: string;
   versionId: string;
   parentId: string | null;
-  author: { id: string; name: string };
+  // id null: a guest who commented through a share link.
+  author: { id: string | null; name: string };
   body: string;
   timecodeMs: number | null;
   rangeEndMs: number | null;

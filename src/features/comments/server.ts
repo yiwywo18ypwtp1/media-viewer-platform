@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 import type { CurrentUser } from "@/features/auth/session";
 import { getProjectAccess, listMembers } from "@/features/workspaces/queries";
@@ -61,7 +61,8 @@ const commentColumns = {
   versionId: comments.versionId,
   parentId: comments.parentId,
   authorId: comments.authorId,
-  authorName: users.name,
+  // A member's current name, or the name a guest typed.
+  authorName: sql<string>`coalesce(${users.name}, ${comments.guestName})`,
   body: comments.body,
   timecodeMs: comments.timecodeMs,
   rangeEndMs: comments.rangeEndMs,
@@ -77,7 +78,7 @@ type CommentRow = {
   id: string;
   versionId: string;
   parentId: string | null;
-  authorId: string;
+  authorId: string | null;
   authorName: string;
   body: string;
   timecodeMs: number | null;
@@ -113,7 +114,7 @@ async function findComment(id: string): Promise<CommentRow | undefined> {
   const [row] = await getDb()
     .select(commentColumns)
     .from(comments)
-    .innerJoin(users, eq(users.id, comments.authorId))
+    .leftJoin(users, eq(users.id, comments.authorId))
     .where(eq(comments.id, id))
     .limit(1);
   return row;
@@ -129,7 +130,7 @@ export async function listComments(versionId: string, cursorParam: string | null
   const threads = await db
     .select(commentColumns)
     .from(comments)
-    .innerJoin(users, eq(users.id, comments.authorId))
+    .leftJoin(users, eq(users.id, comments.authorId))
     .where(
       and(
         eq(comments.versionId, versionId),
@@ -151,7 +152,7 @@ export async function listComments(versionId: string, cursorParam: string | null
     ? await db
         .select(commentColumns)
         .from(comments)
-        .innerJoin(users, eq(users.id, comments.authorId))
+        .leftJoin(users, eq(users.id, comments.authorId))
         .where(inArray(comments.parentId, page.map((t) => t.id)))
         .orderBy(asc(comments.createdAt), asc(comments.id))
     : [];
@@ -178,11 +179,11 @@ export async function listMarkers(versionId: string): Promise<Marker[]> {
       timeMs: comments.timecodeMs,
       endMs: comments.rangeEndMs,
       resolvedAt: comments.resolvedAt,
-      authorName: users.name,
+      authorName: sql<string>`coalesce(${users.name}, ${comments.guestName})`,
       body: comments.body,
     })
     .from(comments)
-    .innerJoin(users, eq(users.id, comments.authorId))
+    .leftJoin(users, eq(users.id, comments.authorId))
     .where(and(eq(comments.versionId, versionId), isNull(comments.parentId), isNotNull(comments.timecodeMs)))
     .orderBy(asc(comments.timecodeMs));
   return rows.map((row) => ({
@@ -214,8 +215,47 @@ export async function createComment(
 ): Promise<CommentDto> {
   const { version, role, workspaceId } = await getVersionAccess(user.id, versionId);
   if (!can(role, "comment")) throw new ApiError(403, "forbidden", "Viewers can't comment.");
-  const db = getDb();
+  const placement = await placeComment(version, input);
 
+  const members = (await listMembers(workspaceId)).map((m) => ({ id: m.userId, name: m.name, email: m.email }));
+  const mentions = keepMentionsInBody(input.body, input.mentions, members);
+
+  const { dto, created } = await insertComment(version, input, placement, { authorId: user.id, mentionedUserIds: mentions });
+  if (created) {
+    await publish(version.projectId, { type: "comment", action: "upserted", versionId: version.id, comment: dto });
+    await notifyMentions(user, mentions, members, version, dto);
+  }
+  return dto;
+}
+
+// A guest's comment through a share link (the caller checked the link allows
+// comments). Shown to members like any other comment, live.
+export async function createGuestComment(
+  link: { id: string },
+  version: Awaited<ReturnType<typeof getVersionAccess>>["version"],
+  input: z.infer<typeof createCommentSchema> & { guestName: string },
+): Promise<CommentDto> {
+  const placement = await placeComment(version, input);
+  const { dto, created } = await insertComment(version, input, placement, {
+    authorId: null,
+    guestName: input.guestName,
+    shareLinkId: link.id,
+    mentionedUserIds: [],
+  });
+  if (created) await publish(version.projectId, { type: "comment", action: "upserted", versionId: version.id, comment: dto });
+  return dto;
+}
+
+type VersionForComment = { id: string; kind: "video" | "image"; durationMs: number | null };
+
+// The probed duration and the player's can differ by a few ms (container vs
+// stream length), and the last frame's middle may sit just past the former.
+const END_SLACK_MS = 100;
+
+// Where a new comment may sit: the thread it replies to, its timecode, range
+// and drawing. Same rules for members and guests.
+async function placeComment(version: VersionForComment, input: z.infer<typeof createCommentSchema>) {
+  const db = getDb();
   if (input.parentId) {
     const [parent] = await db
       .select({ versionId: comments.versionId, parentId: comments.parentId })
@@ -228,14 +268,14 @@ export async function createComment(
 
   // Timecodes belong to top-level video comments and must be inside the video.
   const timecodeMs = input.parentId || version.kind !== "video" ? null : input.timecodeMs;
-  if (timecodeMs !== null && version.durationMs !== null && timecodeMs > version.durationMs) {
+  if (timecodeMs !== null && version.durationMs !== null && timecodeMs > version.durationMs + END_SLACK_MS) {
     throw new ApiError(400, "validation_failed", "The timecode is past the end of the video.", {
       timecodeMs: "Past the end of the video.",
     });
   }
   // A range only makes sense with a start (the schema already checked end > start).
   const rangeEndMs = timecodeMs === null ? null : input.rangeEndMs;
-  if (rangeEndMs !== null && version.durationMs !== null && rangeEndMs > version.durationMs) {
+  if (rangeEndMs !== null && version.durationMs !== null && rangeEndMs > version.durationMs + END_SLACK_MS) {
     throw new ApiError(400, "validation_failed", "The range ends past the end of the video.", {
       rangeEndMs: "Past the end of the video.",
     });
@@ -243,38 +283,27 @@ export async function createComment(
 
   // A drawing belongs to a frame: only kept on comments that have a timecode.
   const annotation = timecodeMs === null ? null : input.annotation;
+  return { timecodeMs, rangeEndMs, annotation };
+}
 
-  const members = (await listMembers(workspaceId)).map((m) => ({ id: m.userId, name: m.name, email: m.email }));
-  const mentions = keepMentionsInBody(input.body, input.mentions, members);
-
-  const inserted = await db
+async function insertComment(
+  version: { id: string },
+  input: z.infer<typeof createCommentSchema>,
+  placement: Awaited<ReturnType<typeof placeComment>>,
+  author: Pick<typeof comments.$inferInsert, "authorId" | "guestName" | "shareLinkId" | "mentionedUserIds">,
+) {
+  const inserted = await getDb()
     .insert(comments)
-    .values({
-      id: input.id,
-      versionId: version.id,
-      authorId: user.id,
-      parentId: input.parentId,
-      body: input.body,
-      timecodeMs,
-      rangeEndMs,
-      annotation,
-      mentionedUserIds: mentions,
-    })
+    .values({ id: input.id, versionId: version.id, parentId: input.parentId, body: input.body, ...placement, ...author })
     // A retried POST with the same client id is a no-op, not a duplicate.
     .onConflictDoNothing({ target: comments.id })
     .returning({ id: comments.id });
 
   const row = await findComment(input.id);
-  if (!row || row.authorId !== user.id || row.versionId !== version.id) {
+  if (!row || row.authorId !== (author.authorId ?? null) || row.versionId !== version.id) {
     throw new ApiError(409, "id_conflict", "Comment id already used.");
   }
-  const dto = toDto(row);
-
-  if (inserted.length > 0) {
-    await publish(version.projectId, { type: "comment", action: "upserted", versionId: version.id, comment: dto });
-    await notifyMentions(user, mentions, members, version, dto);
-  }
-  return dto;
+  return { dto: toDto(row), created: inserted.length > 0 };
 }
 
 async function notifyMentions(
@@ -366,7 +395,7 @@ async function withReplies(dto: CommentDto): Promise<CommentDto> {
   const replies = await getDb()
     .select(commentColumns)
     .from(comments)
-    .innerJoin(users, eq(users.id, comments.authorId))
+    .leftJoin(users, eq(users.id, comments.authorId))
     .where(eq(comments.parentId, dto.id))
     .orderBy(asc(comments.createdAt), asc(comments.id));
   return { ...dto, replies: replies.map((r) => toDto(r)) };

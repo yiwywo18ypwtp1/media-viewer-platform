@@ -11,8 +11,9 @@ import { TimecodeDisplay } from "./timecode-display";
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
 
 type Props = {
-  assetId: string;
-  versionId: string;
+  // Where to get fresh URLs when the signed ones expire (members and share
+  // link guests use different endpoints).
+  refreshUrl: string;
   initialUrls: PlaybackUrls;
   // Comment markers on the timeline; clicking one calls onMarkerSelect.
   markers: TimelineMarker[];
@@ -22,7 +23,7 @@ type Props = {
 // Native <video> with our own controls. React state holds only what changes on
 // user action (playing, speed, mute, fullscreen); the playback position is read
 // from the element and drawn through refs (see use-video-time.ts).
-export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelect }: Props) {
+export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Props) {
   const { videoRef, rate, setOverlayHost } = usePlayer();
   const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -74,7 +75,7 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
     }
     lastRefresh.current = Date.now();
     resumeAt.current = { time: video.currentTime, play: wantsToPlay.current };
-    const response = await fetch(`/api/assets/${assetId}/versions/${versionId}/playback`);
+    const response = await fetch(refreshUrl);
     if (!response.ok) {
       setError("Playback failed. Reload the page to try again.");
       return;
@@ -183,9 +184,9 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
           />
           {/* Annotation layers are portaled in here (see annotation-layer.tsx). */}
           <div ref={setOverlayHost} className="pointer-events-none absolute inset-0" />
-          {error && (
+          {(error || source.denied) && (
             <p role="alert" className="absolute inset-x-0 bottom-4 text-center text-sm text-red-300">
-              {error}
+              {source.denied ? "This video is no longer available to you." : error}
             </p>
           )}
         </div>
