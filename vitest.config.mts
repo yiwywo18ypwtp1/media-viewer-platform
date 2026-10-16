@@ -6,6 +6,22 @@ export default defineConfig({
     alias: { "@": path.resolve(import.meta.dirname, "src") },
   },
   test: {
-    include: ["src/**/*.test.ts", "worker/**/*.test.ts"],
+    // Two projects so pure logic keeps running in plain Node (fast, no DOM)
+    // and only component tests pay for jsdom.
+    projects: [
+      {
+        extends: true,
+        test: { name: "unit", include: ["src/**/*.test.ts", "worker/**/*.test.ts"], environment: "node" },
+      },
+      {
+        extends: true,
+        test: {
+          name: "component",
+          include: ["src/**/*.test.tsx"],
+          environment: "jsdom",
+          setupFiles: ["./vitest.setup.ts"],
+        },
+      },
+    ],
   },
 });
