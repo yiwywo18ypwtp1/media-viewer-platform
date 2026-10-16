@@ -83,6 +83,12 @@ export function stepFrames(video: HTMLVideoElement, rate: FrameRate, delta: numb
 
 // The current frame as a comment timecode: the frame's middle, in whole ms
 // (so it maps back to the same frame, see timecode.test.ts).
+// At the very end currentTime equals the duration, which is where the frame
+// *after* the last one would start: clamp to the last real frame.
 export function currentFrameMs(video: HTMLVideoElement, rate: FrameRate): number {
-  return Math.round(frameMiddle(frameAt(video.currentTime, rate.fps), rate.fps) * 1000);
+  let frame = frameAt(video.currentTime, rate.fps);
+  if (Number.isFinite(video.duration) && video.duration > 0) {
+    frame = Math.min(frame, Math.max(0, frameAt(video.duration, rate.fps) - 1));
+  }
+  return Math.round(frameMiddle(frame, rate.fps) * 1000);
 }
