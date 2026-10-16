@@ -255,7 +255,10 @@ export async function decide(
       );
     }
     if (result.advanced) {
-      const nextReviewers = await emailsOf(result.request.steps[result.request.currentStep].reviewers);
+      // As on create: the requester isn't asked to review by themselves.
+      const nextReviewers = await emailsOf(
+        result.request.steps[result.request.currentStep].reviewers.filter((id) => id !== result.request.createdBy),
+      );
       const [creator] = await db.select({ name: users.name }).from(users).where(eq(users.id, result.request.createdBy));
       jobs.push(
         ...nextReviewers.map((r) =>

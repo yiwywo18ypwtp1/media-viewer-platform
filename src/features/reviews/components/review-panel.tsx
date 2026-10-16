@@ -75,11 +75,14 @@ export function ReviewPanel(props: Props) {
       {review.message && <p className="whitespace-pre-wrap">{review.message}</p>}
 
       <ol className="flex flex-col gap-2">
-        {review.steps.map((step, index) => (
-          <li key={index}>
-            <p className="text-neutral-500">
+        {review.steps.map((step, index) => {
+          const isCurrent = review.status === "active" && index === review.currentStep;
+          return (
+          <li key={index} aria-current={isCurrent ? "step" : undefined}>
+            <p className={isCurrent ? "font-medium" : "text-neutral-500"}>
               {review.steps.length > 1 && `Step ${index + 1}: `}
               {describeRule(step.rule)}
+              {isCurrent && review.steps.length > 1 && " · current"}
             </p>
             <ul className="flex flex-col">
               {step.reviewers.map((reviewer) => (
@@ -93,7 +96,8 @@ export function ReviewPanel(props: Props) {
               ))}
             </ul>
           </li>
-        ))}
+          );
+        })}
       </ol>
 
       {myTurn && <DecisionButtons requestId={review.id} />}

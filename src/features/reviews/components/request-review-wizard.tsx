@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { z } from "zod";
 import { Button, Field, FormMessage, Input, Select } from "@/components/form";
@@ -218,21 +218,23 @@ export function RequestReviewWizard(props: Props) {
 
 // all / any / at least N, edited in the API's own shape.
 function RuleField(props: { value: Rule; onChange: (rule: Rule) => void; error?: string }) {
+  // One name per step: the radios form a group (arrow keys move within it).
+  const name = useId();
   const kind = typeof props.value === "object" ? "atLeast" : props.value;
   const atLeast = typeof props.value === "object" ? props.value.atLeast : 1;
   return (
     <fieldset className="flex flex-col gap-1 text-sm">
       <legend>Rule</legend>
       <label className="flex items-center gap-2">
-        <input type="radio" checked={kind === "all"} onChange={() => props.onChange("all")} />
+        <input type="radio" name={name} checked={kind === "all"} onChange={() => props.onChange("all")} />
         All reviewers must approve
       </label>
       <label className="flex items-center gap-2">
-        <input type="radio" checked={kind === "any"} onChange={() => props.onChange("any")} />
+        <input type="radio" name={name} checked={kind === "any"} onChange={() => props.onChange("any")} />
         Any one reviewer decides
       </label>
       <label className="flex items-center gap-2">
-        <input type="radio" checked={kind === "atLeast"} onChange={() => props.onChange({ atLeast })} />
+        <input type="radio" name={name} checked={kind === "atLeast"} onChange={() => props.onChange({ atLeast })} />
         At least
         <input
           type="number"

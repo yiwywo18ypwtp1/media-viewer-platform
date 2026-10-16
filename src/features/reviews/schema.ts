@@ -2,9 +2,9 @@ import { z } from "zod";
 
 // Shared by the review request wizard (zodResolver) and the API routes.
 
-// Core: one approval step. Storage, rules and the decision transaction already
-// handle several sequential steps; raising this is all Advanced needs.
-export const MAX_STEPS = 1;
+// Sequential approval steps. The cap only keeps the wizard and the emails
+// sane; rules and the decision transaction work for any number.
+export const MAX_STEPS = 5;
 
 export const ruleSchema = z.union([
   z.literal("all"),
