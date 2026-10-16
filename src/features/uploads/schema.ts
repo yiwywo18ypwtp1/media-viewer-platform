@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { folderNameSchema, MAX_FOLDER_DEPTH } from "@/features/folders/schema";
 
 // Shared by the uploader (client-side checks before anything is sent) and the
 // /api/uploads route handlers (the checks that actually count).
@@ -47,6 +48,10 @@ export const createUploadSchema = z.object({
   projectId: z.uuid(),
   // Present when uploading a new version of an existing asset.
   assetId: z.uuid().optional(),
+  // Where a new asset goes: the open folder, plus the subfolders the file sat
+  // in when a whole folder was dropped (created on the server as needed).
+  folderId: z.uuid().nullable().default(null),
+  folderPath: z.array(folderNameSchema).max(MAX_FOLDER_DEPTH).default([]),
   fileName: z.string().trim().min(1).max(255),
   size: z
     .number()
@@ -71,5 +76,13 @@ export const completeUploadSchema = z.object({
 // --- Responses ---
 
 export type CreateUploadResponse = { uploadId: string; partSize: number; partCount: number };
+// GET /api/uploads/:id: what a reloaded page needs to carry on.
+export type UploadStateResponse = {
+  status: "uploading" | "completed" | "aborted";
+  partSize: number;
+  partCount: number;
+  // Parts S3 actually holds, with their ETags.
+  parts: { partNumber: number; etag: string }[];
+};
 export type PresignPartsResponse = { urls: { partNumber: number; url: string }[] };
 export type CompleteUploadResponse = { assetId: string; versionId: string };

@@ -1,9 +1,12 @@
 import { hashFile } from "./hash-file";
+import { confirmedParts, type ResumeRecord } from "./resume";
+import { deleteRecord, getRecord, putRecord, resumeKeyFor } from "./resume-store";
 import {
   partRange,
   type CompleteUploadResponse,
   type CreateUploadResponse,
   type PresignPartsResponse,
+  type UploadStateResponse,
 } from "./schema";
 import { addSample, estimateTransfer, type RateSample } from "./transfer-rate";
 
@@ -17,6 +20,10 @@ import { addSample, estimateTransfer, type RateSample } from "./transfer-rate";
 //          pause  v  | resume   v
 //              paused         error -> retry -> queued
 //   (cancel from any non-final state)
+//
+// Resume after a reload: every finished part is noted in IndexedDB. When the
+// same file is picked again, start() finds the note, asks the server which
+// parts S3 holds, and only sends the rest.
 
 export type UploadStatus = "queued" | "uploading" | "paused" | "completing" | "done" | "error" | "cancelled";
 
@@ -26,6 +33,8 @@ export type UploadSnapshot = {
   totalBytes: number;
   bytesPerSecond: number | null;
   etaSeconds: number | null;
+  // Bytes found already uploaded by an earlier page (resume after reload).
+  resumedBytes: number;
   error?: string;
   result?: CompleteUploadResponse;
 };
@@ -50,10 +59,20 @@ const URL_BATCH_SIZE = 20;
 const PROGRESS_EMIT_MS = 250; // XHR progress fires far more often than the UI needs
 const STALL_TIMEOUT_MS = 30_000;
 
+export type UploadTarget = {
+  projectId: string;
+  assetId?: string;
+  folderId?: string | null;
+  folderPath?: string[];
+};
+
 export class FileUpload {
   private status: UploadStatus = "queued";
   private uploadId?: string;
+  private partSize = 0;
   private parts: Part[] = [];
+  private resumeKey?: string;
+  private resumedBytes = 0;
   private urls = new Map<number, string>();
   private urlRequest?: Promise<void>;
   private hash?: Promise<string>;
@@ -65,9 +84,14 @@ export class FileUpload {
 
   constructor(
     readonly file: File,
-    private readonly target: { projectId: string; assetId?: string },
+    private readonly target: UploadTarget,
     private readonly onChange: (snapshot: UploadSnapshot) => void,
   ) {}
+
+  // The IndexedDB key, known once start() has looked at the file.
+  get savedKey() {
+    return this.resumeKey;
+  }
 
   get isActive() {
     return this.status === "uploading" || this.status === "completing";
@@ -85,6 +109,7 @@ export class FileUpload {
       totalBytes: this.file.size,
       bytesPerSecond,
       etaSeconds,
+      resumedBytes: this.resumedBytes,
       error: this.error,
       result: this.result,
     };
@@ -96,7 +121,7 @@ export class FileUpload {
     if (this.status !== "queued") return;
     this.setStatus("uploading");
     try {
-      if (!this.uploadId) await this.create();
+      if (!this.uploadId) await this.open();
       // Hash in parallel with the upload; complete() waits for it.
       this.hash ??= hashFile(this.file, this.hashAbort.signal);
       this.hash.catch(() => {}); // handled in complete(); avoid an unhandled rejection meanwhile
@@ -133,13 +158,41 @@ export class FileUpload {
     this.stopActiveParts();
     this.hashAbort.abort();
     this.setStatus("cancelled");
+    void this.forget();
     if (this.uploadId) {
       // Best effort: tells S3 to drop the parts. If it fails, the cleanup job does it.
       await api(`/api/uploads/${this.uploadId}`, { method: "DELETE" }).catch(() => {});
     }
   }
 
+  // Leaving the page: stop sending, but keep the upload (in S3 and in
+  // IndexedDB) so picking the file again later carries on.
+  detach() {
+    if (this.status === "done" || this.status === "cancelled") return;
+    this.stopActiveParts();
+    this.hashAbort.abort();
+    this.status = "paused";
+  }
+
   // --- Internals ---
+
+  // Carries on an earlier upload of this file if there is one, else starts a new one.
+  private async open() {
+    // Recognising the file only reads its first megabytes. Storage errors
+    // (private window) just mean no resume.
+    this.resumeKey = await resumeKeyFor(this.file, this.target).catch(() => undefined);
+    const saved = this.resumeKey ? await getRecord(this.resumeKey).catch(() => undefined) : undefined;
+    if (saved) {
+      const state = await api<UploadStateResponse>(`/api/uploads/${saved.uploadId}`, { method: "GET" }).catch(() => null);
+      if (state?.status === "uploading") {
+        this.useUpload(saved.uploadId, state.partSize, state.partCount, confirmedParts(saved.parts, state.parts), saved);
+        this.resumedBytes = this.parts.reduce((sum, part) => sum + part.loaded, 0);
+        return;
+      }
+      await this.forget(); // finished, aborted or expired: start over
+    }
+    await this.create();
+  }
 
   private async create() {
     const { uploadId, partSize, partCount } = await api<CreateUploadResponse>("/api/uploads", {
@@ -149,17 +202,51 @@ export class FileUpload {
         fileName: this.file.name,
         size: this.file.size,
         mimeType: this.file.type,
+        folderId: this.target.folderId ?? null,
+        folderPath: this.target.folderPath ?? [],
       },
     });
+    this.useUpload(uploadId, partSize, partCount, new Set());
+    void this.remember();
+  }
+
+  private useUpload(uploadId: string, partSize: number, partCount: number, done: Set<number>, saved?: ResumeRecord) {
     this.uploadId = uploadId;
-    this.parts = Array.from({ length: partCount }, (_, i) => ({
-      number: i + 1,
-      ...partRange(i + 1, partSize, this.file.size),
-      state: "pending" as const,
-      loaded: 0,
-      attempts: 0,
-      attemptId: 0,
-    }));
+    this.partSize = partSize;
+    this.parts = Array.from({ length: partCount }, (_, i) => {
+      const range = partRange(i + 1, partSize, this.file.size);
+      const isDone = done.has(i + 1);
+      return {
+        number: i + 1,
+        ...range,
+        state: isDone ? ("done" as const) : ("pending" as const),
+        loaded: isDone ? range.end - range.start : 0,
+        etag: isDone ? saved?.parts.find((p) => p.partNumber === i + 1)?.etag : undefined,
+        attempts: 0,
+        attemptId: 0,
+      };
+    });
+  }
+
+  // Notes the upload and its finished parts in IndexedDB. Called after every
+  // part; each write stores the whole (small) record, so the last one wins.
+  private async remember() {
+    if (!this.resumeKey || !this.uploadId) return;
+    await putRecord({
+      key: this.resumeKey,
+      projectId: this.target.projectId,
+      assetId: this.target.assetId ?? null,
+      fileName: this.file.name,
+      size: this.file.size,
+      uploadId: this.uploadId,
+      partSize: this.partSize,
+      parts: this.parts.filter((p) => p.state === "done").map((p) => ({ partNumber: p.number, etag: p.etag! })),
+      updatedAt: Date.now(),
+    }).catch(() => {});
+  }
+
+  private async forget() {
+    if (this.resumeKey) await deleteRecord(this.resumeKey).catch(() => {});
   }
 
   // Keeps up to PARALLEL_PARTS parts in flight; called after every part event.
@@ -196,6 +283,7 @@ export class FileUpload {
       if (part.attemptId !== attemptId) return;
       part.state = "done";
       part.loaded = part.end - part.start;
+      void this.remember();
     } catch (error) {
       if (part.attemptId !== attemptId) return; // superseded by pause/cancel
       part.loaded = 0;
@@ -307,6 +395,7 @@ export class FileUpload {
         },
       });
       this.setStatus("done");
+      void this.forget();
     } catch (error) {
       // Retrying only re-sends "complete": all parts are already in S3, and
       // the endpoint is idempotent.
@@ -344,7 +433,7 @@ function sleep(ms: number) {
 
 // JSON call to our API. Throws with the server's message from the
 // { error: { message } } envelope.
-async function api<T = void>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T = void>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const response = await fetch(path, {
     method: init.method ?? "POST",
     headers: init.body === undefined ? undefined : { "Content-Type": "application/json" },

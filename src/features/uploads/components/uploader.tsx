@@ -2,6 +2,7 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { formatBytes, formatDuration } from "@/lib/format";
+import { filesFromDrop, filesFromInput } from "../collect-files";
 import { ALLOWED_MIME_TYPES, MAX_FILES_PER_BATCH } from "../schema";
 import { useUploads, type UploadItem } from "../use-uploads";
 
@@ -19,17 +20,24 @@ type Props = {
   projectId: string;
   // Set to upload new versions of this asset instead of creating new assets.
   assetId?: string;
+  // The open folder: new assets land there.
+  folderId?: string | null;
 };
 
-export function Uploader({ projectId, assetId }: Props) {
-  const uploads = useUploads({ projectId, assetId });
+export function Uploader({ projectId, assetId, folderId }: Props) {
+  const uploads = useUploads({ projectId, assetId, folderId });
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  // New versions are single files; folders only make sense for new assets.
+  const allowFolders = !assetId;
 
-  function onDrop(event: DragEvent) {
+  async function onDrop(event: DragEvent) {
     event.preventDefault();
     setDragging(false);
-    uploads.addFiles([...event.dataTransfer.files]);
+    const picked = await filesFromDrop(event.dataTransfer);
+    // A new version takes one file, and folders don't apply.
+    uploads.addFiles(allowFolders ? picked : picked.slice(0, 1).map(({ file }) => ({ file, folderPath: [] })));
   }
 
   const visible = uploads.items.filter((item) => item.snapshot.status !== "cancelled");
@@ -45,7 +53,7 @@ export function Uploader({ projectId, assetId }: Props) {
           setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
+        onDrop={(event) => void onDrop(event)}
         className={`flex flex-col items-center gap-2 rounded-md border-2 border-dashed px-6 py-8 text-center text-sm ${
           dragging ? "border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-900" : "border-neutral-300 dark:border-neutral-700"
         }`}
@@ -55,9 +63,18 @@ export function Uploader({ projectId, assetId }: Props) {
           <button type="button" className="underline" onClick={() => inputRef.current?.click()}>
             choose files
           </button>
+          {allowFolders && (
+            <>
+              {" or "}
+              <button type="button" className="underline" onClick={() => folderInputRef.current?.click()}>
+                a folder
+              </button>
+            </>
+          )}
         </p>
         <p className="text-neutral-500">
           Up to {MAX_FILES_PER_BATCH} files at a time, 5 GB each. MP4, MOV, WebM, JPEG, PNG, WebP.
+          {allowFolders && " Dropped folders keep their structure."}
         </p>
         <input
           ref={inputRef}
@@ -66,11 +83,44 @@ export function Uploader({ projectId, assetId }: Props) {
           accept={Object.keys(ALLOWED_MIME_TYPES).join(",")}
           className="hidden"
           onChange={(event) => {
-            uploads.addFiles([...(event.target.files ?? [])]);
+            uploads.addFiles([...(event.target.files ?? [])].map((file) => ({ file, folderPath: [] })));
             event.target.value = ""; // allow picking the same file again
           }}
         />
+        {allowFolders && (
+          <input
+            // webkitdirectory isn't in React's types; every current browser supports it.
+            ref={(element) => {
+              folderInputRef.current = element;
+              element?.setAttribute("webkitdirectory", "");
+            }}
+            type="file"
+            className="hidden"
+            onChange={(event) => {
+              if (event.target.files) uploads.addFiles(filesFromInput(event.target.files));
+              event.target.value = "";
+            }}
+          />
+        )}
       </div>
+
+      {uploads.unfinished.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950">
+          <p className="font-medium">Unfinished uploads. Choose the same file again to continue where it stopped.</p>
+          <ul className="flex flex-col gap-1">
+            {uploads.unfinished.map((entry) => (
+              <li key={entry.key} className="flex items-center justify-between gap-3">
+                <span className="truncate">
+                  {entry.fileName} · {Math.floor((entry.sentBytes / entry.size) * 100)}% of {formatBytes(entry.size)}
+                </span>
+                <button type="button" className="shrink-0 underline" onClick={() => void uploads.discardUnfinished(entry)}>
+                  Discard
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {uploads.rejected.length > 0 && (
         <ul role="alert" className="text-sm text-red-600">
@@ -109,7 +159,7 @@ export function Uploader({ projectId, assetId }: Props) {
 }
 
 function UploadRow({ item, uploads }: { item: UploadItem; uploads: ReturnType<typeof useUploads> }) {
-  const { status, uploadedBytes, totalBytes, bytesPerSecond, etaSeconds, error } = item.snapshot;
+  const { status, uploadedBytes, totalBytes, bytesPerSecond, etaSeconds, resumedBytes, error } = item.snapshot;
   const percent = totalBytes > 0 ? Math.floor((uploadedBytes / totalBytes) * 100) : 0;
 
   return (
@@ -131,6 +181,7 @@ function UploadRow({ item, uploads }: { item: UploadItem; uploads: ReturnType<ty
       <div className="flex justify-between gap-3 text-xs text-neutral-500 tabular-nums">
         <span>
           {STATUS_LABELS[status]} · {percent}% · {formatBytes(uploadedBytes)} of {formatBytes(totalBytes)}
+          {resumedBytes > 0 && status !== "done" && ` · resumed at ${Math.floor((resumedBytes / totalBytes) * 100)}%`}
         </span>
         {status === "uploading" && bytesPerSecond !== null && (
           <span>

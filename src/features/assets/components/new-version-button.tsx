@@ -32,7 +32,8 @@ export function NewVersionButton(props: { projectId: string; assetId: string; ki
         className="hidden"
         aria-label="Upload a new version"
         onChange={(event) => {
-          uploads.addFiles([...(event.target.files ?? [])].slice(0, 1));
+          // Picking the file of an interrupted version upload carries it on (resume).
+          uploads.addFiles([...(event.target.files ?? [])].slice(0, 1).map((file) => ({ file, folderPath: [] })));
           event.target.value = "";
         }}
       />

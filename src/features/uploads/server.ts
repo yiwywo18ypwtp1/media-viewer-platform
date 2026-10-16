@@ -6,12 +6,14 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 import type { CurrentUser } from "@/features/auth/session";
+import { ensureFolderPath, getFolderInProject } from "@/features/folders/queries";
 import { getProjectAccess } from "@/features/workspaces/queries";
 import { can } from "@/features/workspaces/roles";
 import { isUuid } from "@/lib/ids";
@@ -32,6 +34,7 @@ import {
   type CreateUploadResponse,
   type presignPartsSchema,
   type PresignPartsResponse,
+  type UploadStateResponse,
 } from "./schema";
 
 // Business logic behind /api/uploads/*. The bytes never pass through here:
@@ -89,6 +92,15 @@ export async function createUpload(
     }
   }
 
+  // New assets only: a new version stays wherever its asset is.
+  let folderId: string | null = null;
+  if (!input.assetId) {
+    if (input.folderId && !(await getFolderInProject(access.project.id, input.folderId))) {
+      throw new ApiError(404, "not_found", "Folder not found.");
+    }
+    folderId = await ensureFolderPath(access.project.id, input.folderId, input.folderPath);
+  }
+
   const { partSize } = planParts(input.size);
   const id = randomUUID();
   const s3Key = `originals/${id}`;
@@ -105,6 +117,7 @@ export async function createUpload(
     id,
     projectId: access.project.id,
     assetId: input.assetId,
+    folderId,
     userId: user.id,
     fileName: input.fileName,
     size: input.size,
@@ -116,6 +129,42 @@ export async function createUpload(
 
   (await requestLogger()).info({ uploadId: id, projectId: access.project.id, size: input.size }, "upload started");
   return { uploadId: id, partSize, partCount: partCountOf({ size: input.size, partSize }) };
+}
+
+// A reloaded page asks where its upload stands. The parts come from S3, not
+// from the browser's notes: S3 is what "complete" will be checked against.
+export async function getUploadState(user: CurrentUser, uploadId: string): Promise<UploadStateResponse> {
+  const upload = await getOwnUpload(user.id, uploadId);
+  const base = { status: upload.status, partSize: upload.partSize, partCount: partCountOf(upload) };
+  if (upload.status !== "uploading") return { ...base, parts: [] };
+
+  const parts: UploadStateResponse["parts"] = [];
+  let marker: string | undefined;
+  try {
+    // ListParts pages at 1000 parts; a 5 GB file has at most 320 of 16 MiB.
+    do {
+      const page = await getS3().send(
+        new ListPartsCommand({
+          Bucket: getEnv().S3_BUCKET,
+          Key: upload.s3Key,
+          UploadId: upload.s3UploadId,
+          PartNumberMarker: marker,
+        }),
+      );
+      for (const part of page.Parts ?? []) {
+        if (part.PartNumber && part.ETag) parts.push({ partNumber: part.PartNumber, etag: part.ETag });
+      }
+      marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
+    } while (marker);
+  } catch (error) {
+    // Gone from S3 (expired by the stale-upload cleanup): nothing to resume.
+    if (error instanceof Error && error.name === "NoSuchUpload") {
+      await getDb().update(uploads).set({ status: "aborted" }).where(eq(uploads.id, upload.id));
+      return { ...base, status: "aborted", parts: [] };
+    }
+    throw error;
+  }
+  return { ...base, parts };
 }
 
 export async function presignParts(
@@ -227,6 +276,7 @@ export async function completeUpload(
         .insert(assets)
         .values({
           projectId: locked.projectId,
+          folderId: locked.folderId,
           name: assetNameFromFile(locked.fileName),
           kind: ALLOWED_MIME_TYPES[locked.mimeType as keyof typeof ALLOWED_MIME_TYPES],
         })
