@@ -61,3 +61,17 @@ COPY --from=build --chown=node:node /app/dist/migrate.js ./
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 USER node
 CMD ["node", "migrate.js"]
+
+# --- e2e: Playwright tests in a container (compose profile "e2e") ---
+# Microsoft's image has the browsers and their system libraries. Its version
+# must match @playwright/test in package.json.
+FROM mcr.microsoft.com/playwright:v1.64.1-noble AS e2e
+WORKDIR /e2e
+RUN chown pwuser:pwuser /e2e
+USER pwuser
+# Only the test runner, not the app's dependencies.
+RUN --mount=type=cache,target=/home/pwuser/.npm,uid=1001,gid=1001 \
+    npm init -y >/dev/null && npm install --no-audit --no-fund @playwright/test@1.64.1
+COPY --chown=pwuser:pwuser playwright.config.ts ./
+COPY --chown=pwuser:pwuser e2e ./e2e
+CMD ["npx", "playwright", "test"]

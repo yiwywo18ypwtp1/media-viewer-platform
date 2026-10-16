@@ -9,3 +9,4 @@ coverage
 .DS_Store
 docker-compose*.yml
 frontend-task-media-review.md
+e2e-results

@@ -1,0 +1,33 @@
+# Reverse proxy in front of web, so web can run as several containers
+# (docker compose up --scale web=2). Plain HTTP: TLS is out of scope locally.
+{
+	admin off
+	auto_https off
+}
+
+:3000 {
+	reverse_proxy {
+		# Look the web containers up in Docker's DNS every few seconds, so
+		# instances added by --scale (or restarted ones) are picked up.
+		dynamic a {
+			name web
+			port 3000
+			refresh 5s
+		}
+		lb_policy round_robin
+		# A request that fails to reach one instance is retried on another
+		# (e.g. one that is restarting), and that instance is skipped for a while.
+		lb_try_duration 5s
+		fail_duration 10s
+		# Server-Sent Events go through unbuffered (Caddy also does this by
+		# itself for text/event-stream; stated here so it's visible).
+		flush_interval -1
+	}
+}
+
+# MinIO behind the same proxy, reachable only inside the compose network.
+# The e2e browser maps "localhost" to this container, so presigned URLs
+# signed for localhost:9000 reach MinIO with their Host header intact.
+:9000 {
+	reverse_proxy minio:9000
+}

@@ -1,13 +1,30 @@
 name: media-review-hub
 
 services:
+  # The entry point on :3000. Spreads requests over the web containers, so
+  # `docker compose up --scale web=2` works (sessions live in Postgres and
+  # realtime events in Redis: any instance can serve any request).
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    volumes: ["./docker/Caddyfile:/etc/caddy/Caddyfile:ro"]
+    healthcheck:
+      # Healthy once it can reach a healthy web instance.
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      web: { condition: service_healthy }
+
   web:
     build: { context: ., target: web }
     env_file: .env
     # tini as PID 1: forwards signals and reaps zombies.
     init: true
     restart: unless-stopped
-    ports: ["3000:3000"]
+    # No host port: reached through caddy (several instances can't share one).
     # Next finishes in-flight requests on SIGTERM; this bounds how long it may take.
     stop_grace_period: 30s
     depends_on:
@@ -34,6 +51,10 @@ services:
     build: { context: ., target: migrate }
     env_file: .env
     restart: "no"
+    # One-shot: not attached to `up`'s output, so its normal exit doesn't stop
+    # the stack under --abort-on-container-exit (the e2e run). Its logs are
+    # still in `docker compose logs migrate`.
+    attach: false
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -89,6 +110,8 @@ services:
     image: cgr.dev/chainguard/minio@sha256:2136d593beacf4461187035eca949fe49abd589d5079735025c711ca58fee0c8
     entrypoint: ["sh", "/minio-init.sh"]
     env_file: .env
+    # One-shot, like migrate.
+    attach: false
     volumes: ["./docker/minio-init.sh:/minio-init.sh:ro"]
     restart: "no"
     depends_on:
@@ -103,6 +126,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Playwright tests in a container against this stack:
+  #   docker compose --profile e2e up --build --abort-on-container-exit --exit-code-from e2e
+  e2e:
+    profiles: [e2e]
+    build: { context: ., target: e2e }
+    environment:
+      BASE_URL: http://localhost:3000
+      MAILPIT_URL: http://mailpit:8025
+      # The browser keeps using "localhost" (cookies, the CSRF Origin check and
+      # presigned URL signatures all depend on it) but reaches caddy, which
+      # serves the app on :3000 and MinIO on :9000.
+      E2E_HOST_RULES: MAP localhost caddy
+      CI: "1"
+    # Chromium needs more shared memory than Docker's 64 MB default.
+    shm_size: 1gb
+    volumes: ["./e2e-results:/e2e/results"]
+    depends_on:
+      caddy: { condition: service_healthy }
+      worker: { condition: service_healthy }
 
 volumes:
   postgres-data:

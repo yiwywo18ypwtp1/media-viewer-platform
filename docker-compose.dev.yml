@@ -41,3 +41,8 @@ services:
 
   redis:
     ports: ["6379:6379"]
+
+  # The dev web has no healthcheck (see above), so don't wait for "healthy".
+  caddy:
+    depends_on:
+      web: { condition: service_started }
