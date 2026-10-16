@@ -96,7 +96,7 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
             <MoveAssetSelect assetId={asset.id} folderId={asset.folderId} folders={folderPaths} />
           )}
         </div>
-        <nav aria-label="Versions" className="flex flex-wrap gap-1 text-sm">
+        <nav aria-label="Versions" className="flex flex-wrap items-center gap-1 text-sm">
           {versions.map((v) => (
             <Link
               key={v.id}
@@ -111,6 +111,11 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
               v{v.number}
             </Link>
           ))}
+          {versions.length > 1 && (
+            <Link href={`/a/${asset.id}/compare?b=${version.number}`} className="ml-2 underline">
+              Compare
+            </Link>
+          )}
         </nav>
       </div>
 
