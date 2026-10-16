@@ -128,6 +128,7 @@ function Thread({ thread, ...props }: Props & { thread: ClientComment }) {
               const error = await props.comments.create({
                 ...values,
                 timecodeMs: null,
+                rangeEndMs: null,
                 annotation: null,
                 parentId: thread.id,
               });
@@ -176,9 +177,12 @@ function CommentItem({ comment, ...props }: Props & { comment: ClientComment }) 
             type="button"
             onClick={() => props.onSelect(comment.id)}
             className="font-mono text-blue-700 underline dark:text-blue-400"
-            aria-label={`Go to ${formatTimecode(comment.timecodeMs / 1000, player.rate)}`}
+            aria-label={`Go to ${formatTimecode(comment.timecodeMs / 1000, player.rate)}${
+              comment.rangeEndMs !== null ? `, range until ${formatTimecode(comment.rangeEndMs / 1000, player.rate)}` : ""
+            }`}
           >
             {formatTimecode(comment.timecodeMs / 1000, player.rate)}
+            {comment.rangeEndMs !== null && `–${formatTimecode(comment.rangeEndMs / 1000, player.rate)}`}
           </button>
         )}
         {/* Local time zone in the browser; may differ from the server render. */}

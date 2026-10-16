@@ -3,19 +3,21 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import type { z } from "zod";
+import { z } from "zod";
 import { Button, FormMessage } from "@/components/form";
 import { AnnotationField } from "@/features/annotations/components/annotation-field";
 import { annotationSchema } from "@/features/annotations/schema";
 import { currentFrameMs, useOptionalPlayer } from "@/features/player/player-context";
 import { formatTimecode } from "@/features/player/timecode";
-import { createCommentSchema, keepMentionsInBody, type Member } from "../schema";
+import { checkRange, commentFieldsSchema, keepMentionsInBody, type Member } from "../schema";
 
 // The form's own schema is a slice of the API schema: same rules on both sides.
-// `annotation` is re-declared without the API's default: the form always holds it.
-const formSchema = createCommentSchema
+// `rangeEndMs` and `annotation` are re-declared without the API's defaults:
+// the form always holds them.
+const formSchema = commentFieldsSchema
   .pick({ body: true, mentions: true, timecodeMs: true })
-  .extend({ annotation: annotationSchema.nullable() });
+  .extend({ rangeEndMs: z.number().int().min(0).nullable(), annotation: annotationSchema.nullable() })
+  .superRefine(checkRange);
 type FormValues = z.infer<typeof formSchema>;
 
 type Props = {
@@ -41,11 +43,13 @@ export function CommentForm(props: Props) {
       body: props.initial?.body ?? "",
       mentions: props.initial?.mentions ?? [],
       timecodeMs: null,
+      rangeEndMs: null,
       annotation: null,
     },
   });
   const { errors, isSubmitting } = form.formState;
   const timecodeMs = useWatch({ control: form.control, name: "timecodeMs" });
+  const rangeEndMs = useWatch({ control: form.control, name: "rangeEndMs" });
   const annotation = useWatch({ control: form.control, name: "annotation" });
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const timecodeRemoved = useRef(false);
@@ -82,6 +86,13 @@ export function CommentForm(props: Props) {
     const ms = currentFrameMs(video, player.rate);
     form.setValue("timecodeMs", ms);
     return ms;
+  }
+
+  // The frame on screen ends the range (play or step to it, then click).
+  function captureRangeEnd() {
+    const video = player?.videoRef.current;
+    if (!player || !video) return;
+    form.setValue("rangeEndMs", currentFrameMs(video, player.rate), { shouldValidate: true });
   }
 
   // --- Mentions ---
@@ -143,7 +154,7 @@ export function CommentForm(props: Props) {
   const submit = (event?: FormEvent) =>
     form.handleSubmit(async (values) => {
       const cleaned = { ...values, mentions: keepMentionsInBody(values.body, values.mentions, props.members) };
-      form.reset({ body: "", mentions: [], timecodeMs: null, annotation: null });
+      form.reset({ body: "", mentions: [], timecodeMs: null, rangeEndMs: null, annotation: null });
       timecodeRemoved.current = false;
       const error = await props.onSubmit(cleaned);
       if (error) {
@@ -166,17 +177,28 @@ export function CommentForm(props: Props) {
             <>
               <span className="font-mono text-neutral-900 dark:text-neutral-100">
                 @ {formatTimecode(timecodeMs / 1000, player.rate)}
+                {rangeEndMs !== null && ` – ${formatTimecode(rangeEndMs / 1000, player.rate)}`}
               </span>
               <button type="button" className="underline" onClick={captureTimecode}>
                 Use current frame
               </button>
+              {rangeEndMs === null ? (
+                <button type="button" className="underline" onClick={captureRangeEnd}>
+                  Set range end
+                </button>
+              ) : (
+                <button type="button" className="underline" onClick={() => form.setValue("rangeEndMs", null, { shouldValidate: true })}>
+                  Clear range
+                </button>
+              )}
               <button
                 type="button"
                 className="underline"
                 onClick={() => {
                   timecodeRemoved.current = true;
                   form.setValue("timecodeMs", null);
-                  // A drawing belongs to a frame; no timecode, no drawing.
+                  // A drawing belongs to a frame; no timecode, no drawing (and no range).
+                  form.setValue("rangeEndMs", null);
                   form.setValue("annotation", null);
                 }}
               >
@@ -264,6 +286,7 @@ export function CommentForm(props: Props) {
         )}
       </div>
 
+      {errors.rangeEndMs && <FormMessage tone="error">{errors.rangeEndMs.message}</FormMessage>}
       {errors.body && <FormMessage tone="error">{errors.body.message}</FormMessage>}
       {errors.root && <FormMessage tone="error">{errors.root.message}</FormMessage>}
       <div className="flex gap-2">

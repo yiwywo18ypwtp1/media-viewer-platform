@@ -1,0 +1,2 @@
+ALTER TABLE "comments" ADD COLUMN "range_end_ms" integer;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_range_after_start" CHECK ("comments"."range_end_ms" is null or ("comments"."timecode_ms" is not null and "comments"."range_end_ms" > "comments"."timecode_ms"));

@@ -50,7 +50,8 @@ export function applyCommentChange(threads: ClientComment[], change: CommentChan
 
 // Timeline markers follow the same changes: a top-level comment with a
 // timecode is a marker; replies and comments without timecode aren't.
-export type Marker = { id: string; timeMs: number; resolved: boolean; label: string };
+// endMs: set for a range comment (drawn as a bar from timeMs to endMs).
+export type Marker = { id: string; timeMs: number; endMs: number | null; resolved: boolean; label: string };
 
 export function applyMarkerChange(markers: Marker[], change: CommentChange): Marker[] {
   if (change.type === "delete") return markers.filter((marker) => marker.id !== change.id);
@@ -59,6 +60,7 @@ export function applyMarkerChange(markers: Marker[], change: CommentChange): Mar
   const marker: Marker = {
     id: comment.id,
     timeMs: comment.timecodeMs!,
+    endMs: comment.rangeEndMs,
     resolved: comment.resolvedAt !== null,
     label: `${comment.author.name}: ${comment.body.slice(0, 80)}`,
   };

@@ -33,6 +33,7 @@ export type NewComment = {
   body: string;
   mentions: string[];
   timecodeMs: number | null;
+  rangeEndMs: number | null;
   annotation: Shape[] | null;
   parentId: string | null;
 };
@@ -80,6 +81,7 @@ export function useComments(props: {
       author: props.author,
       body: input.body,
       timecodeMs: input.parentId ? null : input.timecodeMs,
+      rangeEndMs: input.parentId || input.timecodeMs === null ? null : input.rangeEndMs,
       annotation: input.parentId || input.timecodeMs === null ? null : input.annotation,
       mentions: input.mentions,
       resolvedAt: null,

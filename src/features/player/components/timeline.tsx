@@ -7,7 +7,8 @@ import { spriteCellAt } from "../sprite";
 import { formatTimecode } from "../timecode";
 import { useVideoTime } from "../use-video-time";
 
-export type TimelineMarker = { id: string; timeMs: number; resolved: boolean; label: string };
+// endMs: a range comment, drawn as a bar instead of a tick.
+export type TimelineMarker = { id: string; timeMs: number; endMs?: number | null; resolved: boolean; label: string };
 
 // Seek bar with comment markers. The playhead moves via a CSS transform set
 // from a ref on every frame; React re-renders the bar only when the markers
@@ -33,6 +34,8 @@ export function Timeline({
     trackRef.current?.setAttribute("aria-valuenow", seconds.toFixed(2));
     trackRef.current?.setAttribute("aria-valuetext", formatTimecode(seconds, rate));
   });
+
+  const percentOf = (ms: number) => (durationSeconds > 0 ? Math.min((ms / 1000 / durationSeconds) * 100, 100) : 0);
 
   function pointerFraction(event: PointerEvent<HTMLDivElement>) {
     const box = event.currentTarget.getBoundingClientRect();
@@ -66,21 +69,29 @@ export function Timeline({
     <div className="flex flex-col gap-1">
       {markers.length > 0 && (
         <div className="relative h-3" role="group" aria-label="Comment markers">
-          {markers.map((marker) => (
-            <button
-              key={marker.id}
-              type="button"
-              onClick={() => onMarkerSelect(marker.id)}
-              aria-label={`Comment at ${formatTimecode(marker.timeMs / 1000, rate)}, ${marker.label}`}
-              title={marker.label}
-              style={{
-                left: `${durationSeconds > 0 ? Math.min((marker.timeMs / 1000 / durationSeconds) * 100, 100) : 0}%`,
-              }}
-              className={`absolute top-0 h-3 w-1.5 -translate-x-1/2 rounded-sm focus-visible:outline-2 focus-visible:outline-white ${
-                marker.resolved ? "bg-neutral-500" : "bg-amber-400"
-              }`}
-            />
-          ))}
+          {markers.map((marker) => {
+            const isRange = marker.endMs != null;
+            const where = isRange
+              ? `from ${formatTimecode(marker.timeMs / 1000, rate)} to ${formatTimecode(marker.endMs! / 1000, rate)}`
+              : `at ${formatTimecode(marker.timeMs / 1000, rate)}`;
+            return (
+              <button
+                key={marker.id}
+                type="button"
+                onClick={() => onMarkerSelect(marker.id)}
+                aria-label={`Comment ${where}, ${marker.label}`}
+                title={marker.label}
+                style={{
+                  left: `${percentOf(marker.timeMs)}%`,
+                  // A range spans its duration, but stays clickable when very short.
+                  width: isRange ? `max(0.375rem, ${percentOf(marker.endMs!) - percentOf(marker.timeMs)}%)` : undefined,
+                }}
+                className={`absolute top-0 h-3 rounded-sm focus-visible:outline-2 focus-visible:outline-white ${
+                  isRange ? "opacity-70" : "w-1.5 -translate-x-1/2"
+                } ${marker.resolved ? "bg-neutral-500" : "bg-amber-400"}`}
+              />
+            );
+          })}
         </div>
       )}
       <div

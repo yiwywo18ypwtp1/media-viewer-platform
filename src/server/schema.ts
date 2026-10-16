@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
+  check,
   index,
   integer,
   jsonb,
@@ -263,6 +264,8 @@ export const comments = pgTable(
     body: text("body").notNull(),
     // Video time the comment points at (frame middle, see player/timecode.ts).
     timecodeMs: integer("timecode_ms"),
+    // Optional end of a range starting at timecode_ms (frame middle as well).
+    rangeEndMs: integer("range_end_ms"),
     // Drawing over that frame: normalized shapes (see features/annotations).
     annotation: jsonb("annotation").$type<Shape[]>(),
     mentionedUserIds: uuid("mentioned_user_ids").array().notNull().default(sql`'{}'::uuid[]`),
@@ -276,6 +279,11 @@ export const comments = pgTable(
   (table) => [
     index("comments_version_created_idx").on(table.versionId, table.createdAt, table.id),
     index("comments_parent_id_idx").on(table.parentId),
+    // The API checks this too; the database has the last word.
+    check(
+      "comments_range_after_start",
+      sql`${table.rangeEndMs} is null or (${table.timecodeMs} is not null and ${table.rangeEndMs} > ${table.timecodeMs})`,
+    ),
   ],
 );
 

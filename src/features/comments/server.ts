@@ -64,6 +64,7 @@ const commentColumns = {
   authorName: users.name,
   body: comments.body,
   timecodeMs: comments.timecodeMs,
+  rangeEndMs: comments.rangeEndMs,
   annotation: comments.annotation,
   mentions: comments.mentionedUserIds,
   resolvedAt: comments.resolvedAt,
@@ -80,6 +81,7 @@ type CommentRow = {
   authorName: string;
   body: string;
   timecodeMs: number | null;
+  rangeEndMs: number | null;
   annotation: Shape[] | null;
   mentions: string[];
   resolvedAt: Date | null;
@@ -96,6 +98,7 @@ function toDto(row: CommentRow, replies: CommentDto[] = []): CommentDto {
     author: { id: row.authorId, name: row.authorName },
     body: row.body,
     timecodeMs: row.timecodeMs,
+    rangeEndMs: row.rangeEndMs,
     annotation: row.annotation,
     mentions: row.mentions,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
@@ -173,6 +176,7 @@ export async function listMarkers(versionId: string): Promise<Marker[]> {
     .select({
       id: comments.id,
       timeMs: comments.timecodeMs,
+      endMs: comments.rangeEndMs,
       resolvedAt: comments.resolvedAt,
       authorName: users.name,
       body: comments.body,
@@ -184,6 +188,7 @@ export async function listMarkers(versionId: string): Promise<Marker[]> {
   return rows.map((row) => ({
     id: row.id,
     timeMs: row.timeMs!,
+    endMs: row.endMs,
     resolved: row.resolvedAt !== null,
     label: markerLabel(row.authorName, row.body),
   }));
@@ -228,6 +233,13 @@ export async function createComment(
       timecodeMs: "Past the end of the video.",
     });
   }
+  // A range only makes sense with a start (the schema already checked end > start).
+  const rangeEndMs = timecodeMs === null ? null : input.rangeEndMs;
+  if (rangeEndMs !== null && version.durationMs !== null && rangeEndMs > version.durationMs) {
+    throw new ApiError(400, "validation_failed", "The range ends past the end of the video.", {
+      rangeEndMs: "Past the end of the video.",
+    });
+  }
 
   // A drawing belongs to a frame: only kept on comments that have a timecode.
   const annotation = timecodeMs === null ? null : input.annotation;
@@ -244,6 +256,7 @@ export async function createComment(
       parentId: input.parentId,
       body: input.body,
       timecodeMs,
+      rangeEndMs,
       annotation,
       mentionedUserIds: mentions,
     })

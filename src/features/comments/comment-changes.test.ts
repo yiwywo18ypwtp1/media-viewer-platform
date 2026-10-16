@@ -9,6 +9,7 @@ function comment(id: string, overrides: Partial<ClientComment> = {}): ClientComm
     author: { id: "u", name: "U" },
     body: id,
     timecodeMs: null,
+    rangeEndMs: null,
     annotation: null,
     mentions: [],
     resolvedAt: null,
@@ -84,6 +85,11 @@ describe("applyMarkerChange", () => {
     expect(markers).toMatchObject([{ id: "a", resolved: true }]);
     markers = applyMarkerChange(markers, { type: "delete", id: "a", parentId: null });
     expect(markers).toEqual([]);
+  });
+
+  it("carries a range's end", () => {
+    const markers = applyMarkerChange([], { type: "upsert", comment: comment("a", { timecodeMs: 1500, rangeEndMs: 4000 }) });
+    expect(markers).toMatchObject([{ id: "a", timeMs: 1500, endMs: 4000 }]);
   });
 
   it("ignores replies and comments without a timecode", () => {
