@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listHref, type ListParams } from "@/features/assets/list-params";
+import { getI18n } from "@/i18n/server";
 import type { Folder } from "../queries";
 import { CreateFolderForm } from "./create-folder-form";
 
@@ -14,11 +15,12 @@ type Props = {
 
 // Server Component: breadcrumbs and the open folder's subfolders, as plain
 // links that change ?folder= (same idea as the toolbar: the URL is the state).
-export function FolderNav({ projectId, projectName, params, trail, subfolders, canEdit }: Props) {
+export async function FolderNav({ projectId, projectName, params, trail, subfolders, canEdit }: Props) {
+  const { t } = await getI18n();
   const crumbs = [{ id: null, name: projectName }, ...trail];
   return (
     <div className="flex flex-col gap-3">
-      <nav aria-label="Folders" className="text-sm">
+      <nav aria-label={t.folders.nav} className="text-sm">
         <ol className="flex flex-wrap items-center gap-1">
           {crumbs.map((crumb, index) => {
             const last = index === crumbs.length - 1;

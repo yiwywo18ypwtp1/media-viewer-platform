@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { createContext, use, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useI18n } from "@/i18n/client";
 import type { ProcessingEvent, RealtimeEvent } from "@/server/realtime";
 
 type LiveProcessing = Pick<ProcessingEvent, "state" | "progress" | "error">;
@@ -19,11 +20,13 @@ const ProjectEventsContext = createContext<ProjectEventsValue>({ processing: {},
 // comments) are handed to whoever subscribed via useProjectEvent.
 export function ProjectEvents({ projectId, children }: { projectId: string; children: ReactNode }) {
   const router = useRouter();
+  const { t } = useI18n();
   // Only versions currently being processed. Once one finishes, the server
   // render (with its new poster, duration...) is the source of truth again.
   const [processing, setProcessing] = useState<Record<string, LiveProcessing>>({});
   const [live, setLive] = useState(true);
-  const [announcement, setAnnouncement] = useState("");
+  // What screen readers last heard about; the text comes from the dictionary.
+  const [announcement, setAnnouncement] = useState<"ready" | "failed" | null>(null);
   const listeners = useRef(new Set<Listener>());
   // Stable for the provider's lifetime, so subscribers don't re-subscribe.
   const [subscribe] = useState(() => (listener: Listener) => {
@@ -52,7 +55,7 @@ export function ProjectEvents({ projectId, children }: { projectId: string; chil
           delete next[event.versionId];
           return next;
         });
-        setAnnouncement(event.state === "ready" ? "A version finished processing." : "A version failed to process.");
+        setAnnouncement(event.state);
         router.refresh();
       } else {
         setProcessing((prev) => ({ ...prev, [event.versionId]: event }));
@@ -71,12 +74,12 @@ export function ProjectEvents({ projectId, children }: { projectId: string; chil
     <ProjectEventsContext value={{ processing, subscribe }}>
       {!live && (
         <p role="status" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          Live updates are paused. Reconnecting… (reload the page to see the latest state)
+          {t.processing.liveDown}
         </p>
       )}
       {children}
       <p aria-live="polite" className="sr-only">
-        {announcement}
+        {announcement === "ready" ? t.processing.finished : announcement === "failed" ? t.processing.failedAnnouncement : ""}
       </p>
     </ProjectEventsContext>
   );

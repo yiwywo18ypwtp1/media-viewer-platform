@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { FormMessage } from "@/components/form";
 import { useOptionalPlayer } from "@/features/player/player-context";
 import { formatTimecode } from "@/features/player/timecode";
+import { useI18n } from "@/i18n/client";
 import type { ClientComment } from "../comment-changes";
 import type { Member } from "../schema";
 import type { CommentsApi } from "../use-comments";
@@ -27,26 +28,27 @@ type Props = {
 // it doesn't read the player's time, only seeks when asked to.
 export function CommentsPanel(props: Props) {
   const { comments } = props;
+  const { t, tm } = useI18n();
   const openCount = comments.threads.filter((thread) => !thread.resolvedAt).length;
 
   return (
     <section aria-label="Comments" className="flex flex-col gap-4">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">
-          Comments <span className="font-normal text-neutral-500">({openCount} open)</span>
+          {t.comments.title} <span className="font-normal text-neutral-500">{t.comments.open(openCount)}</span>
         </h2>
         {comments.threads.length > 0 && (
           <a href={props.exportUrl} download className="text-xs underline">
-            Export CSV
+            {t.comments.exportCsv}
           </a>
         )}
       </div>
 
       {comments.notice && (
         <div role="status" className="flex justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          {comments.notice}
+          {tm(comments.notice)}
           <button type="button" className="underline" onClick={comments.dismissNotice}>
-            OK
+            {t.comments.ok}
           </button>
         </div>
       )}
@@ -54,7 +56,7 @@ export function CommentsPanel(props: Props) {
       {props.canComment && (
         <CommentForm
           members={props.members}
-          submitLabel="Comment"
+          submitLabel={t.comments.comment}
           withTimecode={props.isVideo}
           draftKey={props.draftKey}
           onSubmit={(values) => comments.create({ ...values, parentId: null })}
@@ -62,7 +64,7 @@ export function CommentsPanel(props: Props) {
       )}
 
       {comments.threads.length === 0 ? (
-        <p className="text-sm text-neutral-500">No comments yet.</p>
+        <p className="text-sm text-neutral-500">{t.comments.none}</p>
       ) : (
         <ol className="flex flex-col gap-3">
           {comments.threads.map((thread) => (
@@ -73,7 +75,7 @@ export function CommentsPanel(props: Props) {
 
       {comments.nextCursor && (
         <button type="button" className="self-start text-sm underline" disabled={comments.loadingMore} onClick={comments.loadMore}>
-          {comments.loadingMore ? "Loading…" : "Load more comments"}
+          {comments.loadingMore ? t.comments.loading : t.comments.loadMore}
         </button>
       )}
     </section>
@@ -81,6 +83,7 @@ export function CommentsPanel(props: Props) {
 }
 
 function Thread({ thread, ...props }: Props & { thread: ClientComment }) {
+  const { t } = useI18n();
   const [replying, setReplying] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
   const selected = props.selectedId === thread.id;
@@ -114,7 +117,7 @@ function Thread({ thread, ...props }: Props & { thread: ClientComment }) {
         <div className="mt-2 flex gap-3 text-xs">
           {!replying && (
             <button type="button" className="underline" onClick={() => setReplying(true)}>
-              Reply
+              {t.comments.reply}
             </button>
           )}
           <button
@@ -122,7 +125,7 @@ function Thread({ thread, ...props }: Props & { thread: ClientComment }) {
             className="underline"
             onClick={() => void props.comments.setResolved(thread, !thread.resolvedAt)}
           >
-            {thread.resolvedAt ? "Reopen" : "Resolve"}
+            {thread.resolvedAt ? t.comments.reopen : t.comments.resolve}
           </button>
         </div>
       )}
@@ -131,7 +134,7 @@ function Thread({ thread, ...props }: Props & { thread: ClientComment }) {
         <div className="mt-2">
           <CommentForm
             members={props.members}
-            submitLabel="Reply"
+            submitLabel={t.comments.reply}
             autoFocus
             onSubmit={async (values) => {
               const error = await props.comments.create({
@@ -156,6 +159,7 @@ const timeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", tim
 
 function CommentItem({ comment, ...props }: Props & { comment: ClientComment }) {
   const player = useOptionalPlayer();
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAuthor = comment.author.id === props.currentUserId;
@@ -164,7 +168,7 @@ function CommentItem({ comment, ...props }: Props & { comment: ClientComment }) 
     return (
       <CommentForm
         members={props.members}
-        submitLabel="Save"
+        submitLabel={t.comments.save}
         autoFocus
         initial={{ body: comment.body, mentions: comment.mentions }}
         onSubmit={async (values) => {
@@ -186,8 +190,8 @@ function CommentItem({ comment, ...props }: Props & { comment: ClientComment }) 
             type="button"
             onClick={() => props.onSelect(comment.id)}
             className="font-mono text-blue-700 underline dark:text-blue-400"
-            aria-label={`Go to ${formatTimecode(comment.timecodeMs / 1000, player.rate)}${
-              comment.rangeEndMs !== null ? `, range until ${formatTimecode(comment.rangeEndMs / 1000, player.rate)}` : ""
+            aria-label={`${t.comments.goTo(formatTimecode(comment.timecodeMs / 1000, player.rate))}${
+              comment.rangeEndMs !== null ? t.comments.rangeUntil(formatTimecode(comment.rangeEndMs / 1000, player.rate)) : ""
             }`}
           >
             {formatTimecode(comment.timecodeMs / 1000, player.rate)}
@@ -198,25 +202,26 @@ function CommentItem({ comment, ...props }: Props & { comment: ClientComment }) 
         <time dateTime={comment.createdAt} suppressHydrationWarning>
           {timeFormat.format(new Date(comment.createdAt))}
         </time>
-        {comment.annotation && <span title="Has a drawing on the frame">✎ drawing</span>}
-        {comment.editedAt && <span>(edited)</span>}
-        {comment.pending && <span>Sending…</span>}
-        {comment.resolvedAt && <span className="text-green-700 dark:text-green-500">Resolved</span>}
+        {comment.author.id === null && <span>{t.comments.guest}</span>}
+        {comment.annotation && <span title={t.comments.hasDrawing}>{t.comments.drawing}</span>}
+        {comment.editedAt && <span>{t.comments.edited}</span>}
+        {comment.pending && <span>{t.comments.sendingState}</span>}
+        {comment.resolvedAt && <span className="text-green-700 dark:text-green-500">{t.comments.resolved}</span>}
       </header>
       <CommentBody body={comment.body} mentions={comment.mentions} members={props.members} />
       {isAuthor && !comment.pending && (
         <div className="flex gap-3 text-xs">
           <button type="button" className="underline" onClick={() => setEditing(true)}>
-            Edit
+            {t.comments.edit}
           </button>
           <button
             type="button"
             className="underline"
             onClick={async () => {
-              if (window.confirm("Delete this comment?")) setError(await props.comments.remove(comment));
+              if (window.confirm(t.comments.confirmDelete)) setError(await props.comments.remove(comment));
             }}
           >
-            Delete
+            {t.comments.delete}
           </button>
         </div>
       )}

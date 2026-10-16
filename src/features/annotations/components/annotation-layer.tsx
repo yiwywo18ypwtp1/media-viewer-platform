@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent, t
 import { createPortal } from "react-dom";
 import { usePlayer } from "@/features/player/player-context";
 import { frameAt } from "@/features/player/timecode";
+import { useI18n } from "@/i18n/client";
 import { contentRect, toNormalized, toPixels, type Rect } from "../geometry";
 import type { Point, Shape, Tool } from "../schema";
 
@@ -22,6 +23,7 @@ type Props = {
 // only, never the comment list.
 export function AnnotationLayer({ shapes, atMs, drawing }: Props) {
   const { videoRef, overlayHost, rate } = usePlayer();
+  const { t } = useI18n();
   const visible = useOnFrame(videoRef, frameAt(atMs / 1000, rate.fps), rate.fps);
   const rect = usePictureRect(videoRef, overlayHost);
   const [draft, setDraft] = useState<Shape | null>(null);
@@ -75,7 +77,7 @@ export function AnnotationLayer({ shapes, atMs, drawing }: Props) {
   return createPortal(
     <svg
       role="img"
-      aria-label={drawing ? "Drawing area: drag to draw on the frame" : `Drawing with ${shapes.length} shape(s)`}
+      aria-label={drawing ? t.annotations.drawingArea : t.annotations.drawingWith(shapes.length)}
       className={`absolute ${drawing ? "pointer-events-auto cursor-crosshair touch-none" : ""}`}
       style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
       onPointerDown={onPointerDown}

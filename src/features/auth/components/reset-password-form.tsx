@@ -3,11 +3,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button, Field, FormMessage, Input } from "@/components/form";
+import { useI18n } from "@/i18n/client";
 import { applyActionError } from "@/lib/apply-action-error";
 import { resetPassword } from "../actions";
 import { resetPasswordSchema } from "../schema";
 
 export function ResetPasswordForm({ token }: { token: string }) {
+  const { t } = useI18n();
   const form = useForm({
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: { token, password: "" },
@@ -21,7 +23,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-      <Field label="New password" htmlFor="password" error={errors.password?.message}>
+      <Field label={t.auth.newPassword} htmlFor="password" error={errors.password?.message}>
         <Input
           id="password"
           type="password"
@@ -36,7 +38,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
         <FormMessage tone="error">{(errors.root ?? errors.token)?.message}</FormMessage>
       )}
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Saving…" : "Set new password"}
+        {isSubmitting ? t.common.saving : t.auth.setNewPassword}
       </Button>
     </form>
   );

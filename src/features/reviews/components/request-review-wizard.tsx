@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch, type FieldPath } from "react-hook-form";
 import { z } from "zod";
 import { Button, Field, FormMessage, Input, Select } from "@/components/form";
+import { useI18n } from "@/i18n/client";
 import { applyActionError } from "@/lib/apply-action-error";
 import { describeRule, type Rule } from "../rules";
 import { createReviewRequestSchema, MAX_STEPS } from "../schema";
@@ -30,12 +31,13 @@ type Props = {
   onClose: () => void;
 };
 
-const SCREENS = ["Details", "Approval", "Confirm"] as const;
+const SCREEN_COUNT = 3; // details, approval, confirm
 // Fields checked before leaving each screen.
 const SCREEN_FIELDS: FieldPath<WizardValues>[][] = [["versionId", "dueLocal", "message"], ["steps"], []];
 
 export function RequestReviewWizard(props: Props) {
   const router = useRouter();
+  const { t } = useI18n();
   const [screen, setScreen] = useState(0);
   const form = useForm<WizardValues>({
     resolver: zodResolver(wizardSchema),
@@ -68,7 +70,7 @@ export function RequestReviewWizard(props: Props) {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null);
-      const error = body?.error ?? { code: "error", message: "Couldn't create the review. Try again." };
+      const error = body?.error ?? { code: "error", message: t.reviews.wizard.createFailed };
       applyActionError(form, error);
       // Field errors may belong to an earlier screen: go back to show them.
       if (error.fieldErrors) setScreen(Object.keys(error.fieldErrors).some((k) => k.startsWith("steps")) ? 1 : 0);
@@ -83,8 +85,8 @@ export function RequestReviewWizard(props: Props) {
 
   return (
     <form onSubmit={(event) => void submit(event)} noValidate className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
-      <ol className="flex gap-4 text-xs" aria-label="Steps">
-        {SCREENS.map((name, index) => (
+      <ol className="flex gap-4 text-xs" aria-label={t.reviews.wizard.steps}>
+        {t.reviews.wizard.screens.map((name, index) => (
           <li key={name} aria-current={index === screen ? "step" : undefined} className={index === screen ? "font-semibold" : "text-neutral-500"}>
             {index + 1}. {name}
           </li>
@@ -93,7 +95,7 @@ export function RequestReviewWizard(props: Props) {
 
       {screen === 0 && (
         <div className="flex flex-col gap-3">
-          <Field label="Version" htmlFor="review-version" error={errors.versionId?.message}>
+          <Field label={t.reviews.wizard.version} htmlFor="review-version" error={errors.versionId?.message}>
             <Select id="review-version" {...form.register("versionId")}>
               {props.versions.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -102,10 +104,10 @@ export function RequestReviewWizard(props: Props) {
               ))}
             </Select>
           </Field>
-          <Field label={`Due (optional, your time: ${timeZone})`} htmlFor="review-due" error={errors.dueLocal?.message}>
+          <Field label={t.reviews.wizard.due(timeZone)} htmlFor="review-due" error={errors.dueLocal?.message}>
             <Input id="review-due" type="datetime-local" aria-invalid={Boolean(errors.dueLocal)} {...form.register("dueLocal")} />
           </Field>
-          <Field label="Message (optional)" htmlFor="review-message" error={errors.message?.message}>
+          <Field label={t.reviews.wizard.message} htmlFor="review-message" error={errors.message?.message}>
             <textarea
               id="review-message"
               rows={3}
@@ -121,14 +123,14 @@ export function RequestReviewWizard(props: Props) {
           {steps.fields.map((field, index) => (
             <fieldset key={field.id} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
               <legend className="px-1 text-sm font-medium">
-                {steps.fields.length > 1 ? `Step ${index + 1}` : "Approval"}
+                {steps.fields.length > 1 ? t.reviews.wizard.step(index + 1) : t.reviews.wizard.approval}
               </legend>
               <Controller
                 control={form.control}
                 name={`steps.${index}.reviewers`}
                 render={({ field: reviewers, fieldState }) => (
                   <fieldset className="flex flex-col gap-1">
-                    <legend className="text-sm">Reviewers</legend>
+                    <legend className="text-sm">{t.reviews.wizard.reviewers}</legend>
                     {props.reviewers.map((reviewer) => (
                       <label key={reviewer.id} className="flex items-center gap-2 text-sm">
                         <input
@@ -158,14 +160,14 @@ export function RequestReviewWizard(props: Props) {
               />
               {steps.fields.length > 1 && (
                 <button type="button" className="self-start text-xs underline" onClick={() => steps.remove(index)}>
-                  Remove step
+                  {t.reviews.wizard.removeStep}
                 </button>
               )}
             </fieldset>
           ))}
           {steps.fields.length < MAX_STEPS && (
             <button type="button" className="self-start text-sm underline" onClick={() => steps.append({ reviewers: [], rule: "all" })}>
-              Add step
+              {t.reviews.wizard.addStep}
             </button>
           )}
         </div>
@@ -176,12 +178,12 @@ export function RequestReviewWizard(props: Props) {
           <dt className="text-neutral-500">Version</dt>
           <dd>v{props.versions.find((v) => v.id === values.versionId)?.number}</dd>
           <dt className="text-neutral-500">Due</dt>
-          <dd>{values.dueLocal ? `${values.dueLocal.replace("T", " ")} (${timeZone})` : "No due date"}</dd>
+          <dd>{values.dueLocal ? `${values.dueLocal.replace("T", " ")} (${timeZone})` : t.reviews.wizard.noDue}</dd>
           {(values.steps ?? []).map((step, index) => (
             <div key={steps.fields[index]?.id ?? index} className="contents">
               <dt className="text-neutral-500">{steps.fields.length > 1 ? `Step ${index + 1}` : "Reviewers"}</dt>
               <dd>
-                {(step.reviewers ?? []).map(nameOf).join(", ")} · {step.rule ? describeRule(step.rule as Rule) : ""}
+                {(step.reviewers ?? []).map(nameOf).join(", ")} · {step.rule ? describeRule(step.rule as Rule, t.reviews.rules) : ""}
               </dd>
             </div>
           ))}
@@ -193,23 +195,23 @@ export function RequestReviewWizard(props: Props) {
       <div className="flex gap-3">
         {screen > 0 && (
           <button type="button" className="text-sm underline" onClick={() => setScreen((s) => s - 1)}>
-            Back
+            {t.reviews.wizard.back}
           </button>
         )}
         {/* Different keys: React must not turn the clicked "Next" element into
             the submit button. Validation resolves within the click, so the
             browser's default action would then submit the form on its own. */}
-        {screen < SCREENS.length - 1 ? (
+        {screen < SCREEN_COUNT - 1 ? (
           <Button key="next" type="button" onClick={() => void next()} className="px-3 py-1">
-            Next
+            {t.reviews.wizard.next}
           </Button>
         ) : (
           <Button key="submit" type="submit" disabled={isSubmitting} className="px-3 py-1">
-            {isSubmitting ? "Sending…" : "Request review"}
+            {isSubmitting ? t.common.sending : t.reviews.requestReview}
           </Button>
         )}
         <button type="button" className="text-sm underline" onClick={props.onClose}>
-          Cancel
+          {t.common.cancel}
         </button>
       </div>
     </form>
@@ -220,32 +222,33 @@ export function RequestReviewWizard(props: Props) {
 function RuleField(props: { value: Rule; onChange: (rule: Rule) => void; error?: string }) {
   // One name per step: the radios form a group (arrow keys move within it).
   const name = useId();
+  const { t } = useI18n();
   const kind = typeof props.value === "object" ? "atLeast" : props.value;
   const atLeast = typeof props.value === "object" ? props.value.atLeast : 1;
   return (
     <fieldset className="flex flex-col gap-1 text-sm">
-      <legend>Rule</legend>
+      <legend>{t.reviews.wizard.rule}</legend>
       <label className="flex items-center gap-2">
         <input type="radio" name={name} checked={kind === "all"} onChange={() => props.onChange("all")} />
-        All reviewers must approve
+        {t.reviews.wizard.ruleAll}
       </label>
       <label className="flex items-center gap-2">
         <input type="radio" name={name} checked={kind === "any"} onChange={() => props.onChange("any")} />
-        Any one reviewer decides
+        {t.reviews.wizard.ruleAny}
       </label>
       <label className="flex items-center gap-2">
         <input type="radio" name={name} checked={kind === "atLeast"} onChange={() => props.onChange({ atLeast })} />
-        At least
+        {t.reviews.wizard.atLeast}
         <input
           type="number"
           min={1}
-          aria-label="Required approvals"
+          aria-label={t.reviews.wizard.requiredApprovals}
           value={atLeast}
           disabled={kind !== "atLeast"}
           onChange={(event) => props.onChange({ atLeast: Number(event.target.value) })}
           className="w-14 rounded border border-neutral-300 bg-transparent px-1 dark:border-neutral-700"
         />
-        must approve
+        {t.reviews.wizard.mustApprove}
       </label>
       {props.error && <FormMessage tone="error">{props.error}</FormMessage>}
     </fieldset>

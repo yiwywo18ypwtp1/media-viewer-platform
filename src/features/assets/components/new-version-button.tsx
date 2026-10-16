@@ -3,11 +3,13 @@
 import { useRef } from "react";
 import { ALLOWED_MIME_TYPES } from "@/features/uploads/schema";
 import { useUploads } from "@/features/uploads/use-uploads";
+import { useI18n } from "@/i18n/client";
 
 // Compact uploader for one asset: picks a single file and uploads it as the
 // asset's next version. Reuses the same upload engine as the main uploader.
 export function NewVersionButton(props: { projectId: string; assetId: string; kind: "video" | "image" }) {
   const uploads = useUploads({ projectId: props.projectId, assetId: props.assetId });
+  const { t, tm } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const current = uploads.items.at(-1);
   const status = current?.snapshot.status;
@@ -22,7 +24,7 @@ export function NewVersionButton(props: { projectId: string; assetId: string; ki
     <span className="inline-flex items-center gap-2 text-xs">
       {!busy && (
         <button type="button" className="underline" onClick={() => inputRef.current?.click()}>
-          New version
+          {t.assets.newVersion}
         </button>
       )}
       <input
@@ -30,7 +32,7 @@ export function NewVersionButton(props: { projectId: string; assetId: string; ki
         type="file"
         accept={accept}
         className="hidden"
-        aria-label="Upload a new version"
+        aria-label={t.assets.uploadNewVersion}
         onChange={(event) => {
           // Picking the file of an interrupted version upload carries it on (resume).
           uploads.addFiles([...(event.target.files ?? [])].slice(0, 1).map((file) => ({ file, folderPath: [] })));
@@ -40,17 +42,17 @@ export function NewVersionButton(props: { projectId: string; assetId: string; ki
       {busy && current && (
         <span className="tabular-nums text-neutral-500">
           {status === "completing"
-            ? "Verifying…"
-            : `Uploading ${Math.floor((current.snapshot.uploadedBytes / current.snapshot.totalBytes) * 100)}%`}
+            ? t.assets.verifying
+            : t.assets.uploadingPercent(Math.floor((current.snapshot.uploadedBytes / current.snapshot.totalBytes) * 100))}
         </span>
       )}
       {status === "error" && current && (
         <>
-          <span className="text-red-600" title={current.snapshot.error}>
-            Upload failed
+          <span className="text-red-600" title={current.snapshot.error && tm(current.snapshot.error)}>
+            {t.assets.uploadFailed}
           </span>
           <button type="button" className="underline" onClick={() => uploads.retry(current.id)}>
-            Retry
+            {t.assets.retry}
           </button>
         </>
       )}

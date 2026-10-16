@@ -16,9 +16,8 @@ import { ProcessingBadge } from "@/features/processing/components/processing-bad
 import { ProjectEvents } from "@/features/processing/components/project-events";
 import { listMembers } from "@/features/workspaces/queries";
 import { can } from "@/features/workspaces/roles";
+import { getI18n } from "@/i18n/server";
 import { formatBytes, formatDuration } from "@/lib/format";
-
-const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" });
 
 export default async function AssetPage({ params, searchParams }: PageProps<"/a/[assetId]">) {
   const user = await requireUser();
@@ -26,6 +25,8 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
   if (!access) notFound();
 
   const { asset, project, workspace, role } = access;
+  const { t, locale } = await getI18n();
+  const dateFormat = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-GB", { dateStyle: "medium", timeZone: "UTC" });
   const versions = await listVersions(asset.id);
   // The selected version lives in the URL (?v=2), defaulting to the latest.
   const requested = Number((await searchParams).v);
@@ -63,7 +64,7 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
   );
 
   const facts = [
-    `Uploaded ${dateFormat.format(version.createdAt)} by ${version.uploadedBy}`,
+    t.assetPage.uploaded(dateFormat.format(version.createdAt), version.uploadedBy),
     formatBytes(version.size),
     version.width && version.height ? `${version.width}×${version.height}` : null,
     version.durationMs !== null ? formatDuration(Math.round(version.durationMs / 1000)) : null,
@@ -100,7 +101,7 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
             <MoveAssetSelect assetId={asset.id} folderId={asset.folderId} folders={folderPaths} />
           )}
         </div>
-        <nav aria-label="Versions" className="flex flex-wrap items-center gap-1 text-sm">
+        <nav aria-label={t.assetPage.versions} className="flex flex-wrap items-center gap-1 text-sm">
           {versions.map((v) => (
             <Link
               key={v.id}
@@ -117,7 +118,7 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
           ))}
           {versions.length > 1 && (
             <Link href={`/a/${asset.id}/compare?b=${version.number}`} className="ml-2 underline">
-              Compare
+              {t.assetPage.compare}
             </Link>
           )}
         </nav>

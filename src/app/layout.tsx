@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { I18nProvider } from "@/i18n/client";
+import { getLocale } from "@/i18n/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,9 +14,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // (see proxy.ts). A prerendered page would carry no nonce and its scripts
   // would be blocked. All pages but two were per-request anyway.
   await connection();
+  const locale = await getLocale();
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="flex min-h-full flex-col">{children}</body>
+    <html lang={locale} className="h-full antialiased">
+      <body className="flex min-h-full flex-col">
+        <I18nProvider locale={locale}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

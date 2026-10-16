@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { getI18n } from "@/i18n/server";
 import { redirect } from "next/navigation";
 import { RegisterForm } from "@/features/auth/components/register-form";
 import { safeNextPath } from "@/features/auth/next-path";
 import { getCurrentUser } from "@/features/auth/session";
 
 export default async function RegisterPage({ searchParams }: PageProps<"/register">) {
+  const { t } = await getI18n();
   const next = safeNextPath((await searchParams).next);
   if (await getCurrentUser()) redirect(next);
 
@@ -12,12 +14,12 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">Create an account</h1>
+      <h1 className="text-2xl font-semibold">{t.auth.createAccount}</h1>
       <RegisterForm next={next} />
       <p className="text-sm">
-        Already have an account?{" "}
+        {t.auth.haveAccount}{" "}
         <Link href={loginHref} className="underline">
-          Sign in
+          {t.auth.signIn}
         </Link>
       </p>
     </>

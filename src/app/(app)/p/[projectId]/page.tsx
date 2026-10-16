@@ -12,6 +12,7 @@ import { Uploader } from "@/features/uploads/components/uploader";
 import { ProjectEvents } from "@/features/processing/components/project-events";
 import { getProjectAccess } from "@/features/workspaces/queries";
 import { can } from "@/features/workspaces/roles";
+import { getI18n } from "@/i18n/server";
 
 export default async function ProjectPage({ params, searchParams }: PageProps<"/p/[projectId]">) {
   const user = await requireUser();
@@ -19,6 +20,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   if (!access) notFound();
 
   const listParams = parseListParams(await searchParams);
+  const { t } = await getI18n();
   const projectId = access.project.id;
   // A folder id from another project (or a deleted one) is a 404, like any
   // other resource we can't show.
@@ -59,10 +61,10 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
         {assets.length === 0 ? (
           <p className="text-sm text-neutral-500">
             {listParams.status !== "all"
-              ? "No assets match this filter."
+              ? t.assets.noMatch
               : listParams.folder
-                ? "This folder has no assets."
-                : "No assets yet."}
+                ? t.assets.emptyFolder
+                : t.assets.noAssets}
           </p>
         ) : listParams.view === "grid" ? (
           <AssetGrid projectId={projectId} assets={assets} canUpload={canUpload} />

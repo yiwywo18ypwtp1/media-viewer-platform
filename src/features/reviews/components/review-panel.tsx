@@ -3,6 +3,7 @@ import type { ReviewSummary } from "../server";
 import { DecisionButtons } from "./decision-buttons";
 import { RequestReviewButton } from "./request-review-button";
 import { describeRule } from "../rules";
+import { getI18n } from "@/i18n/server";
 
 type Props = {
   assetId: string;
@@ -14,18 +15,11 @@ type Props = {
   reviewers: { id: string; name: string }[];
 };
 
-const STATUS_TEXT = {
-  active: "In progress",
-  approved: "Approved",
-  changes_requested: "Changes requested",
-  stale: "Outdated",
-} as const;
-
-const DECISION_TEXT = { approve: "✓ approved", request_changes: "✗ requested changes" } as const;
 
 // Server Component: shows the latest review of the asset. The only client
 // parts are the buttons (decide, request / restart).
-export function ReviewPanel(props: Props) {
+export async function ReviewPanel(props: Props) {
+  const { t } = await getI18n();
   const { review } = props;
   const latestVersion = props.versions[0];
   const wizard = {
@@ -36,8 +30,8 @@ export function ReviewPanel(props: Props) {
 
   if (!review) {
     return props.canRequest ? (
-      <section aria-label="Review" className="flex flex-col gap-2">
-        <RequestReviewButton {...wizard} defaultVersionId={props.selectedVersionId} label="Request review" />
+      <section aria-label={t.reviews.region} className="flex flex-col gap-2">
+        <RequestReviewButton {...wizard} defaultVersionId={props.selectedVersionId} label={t.reviews.requestReview} />
       </section>
     ) : null;
   }
@@ -55,18 +49,18 @@ export function ReviewPanel(props: Props) {
   const deciders = currentStep.reviewers.filter((r) => r.decision !== null).map((r) => r.name);
 
   return (
-    <section aria-label="Review" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+    <section aria-label={t.reviews.region} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4 text-sm dark:border-neutral-800">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-semibold">Review of v{review.versionNumber}</h2>
+        <h2 className="font-semibold">{t.reviews.reviewOf(review.versionNumber)}</h2>
         <span className={review.status === "approved" ? "text-green-700 dark:text-green-500" : review.status === "changes_requested" ? "text-amber-700 dark:text-amber-400" : "text-neutral-500"}>
-          {STATUS_TEXT[review.status]}
-          {review.status === "active" && review.steps.length > 1 && ` · step ${review.currentStep + 1} of ${review.steps.length}`}
+          {t.reviews.status[review.status]}
+          {review.status === "active" && review.steps.length > 1 && t.reviews.stepOf(review.currentStep + 1, review.steps.length)}
         </span>
         <span className="text-neutral-500">
-          requested by {review.createdBy}
+          {t.reviews.requestedBy(review.createdBy)}
           {review.dueAt && (
             <>
-              {" · due "}
+              {t.reviews.due}
               <LocalTime value={review.dueAt} />
             </>
           )}
@@ -80,16 +74,20 @@ export function ReviewPanel(props: Props) {
           return (
           <li key={index} aria-current={isCurrent ? "step" : undefined}>
             <p className={isCurrent ? "font-medium" : "text-neutral-500"}>
-              {review.steps.length > 1 && `Step ${index + 1}: `}
-              {describeRule(step.rule)}
-              {isCurrent && review.steps.length > 1 && " · current"}
+              {review.steps.length > 1 && t.reviews.stepLabel(index + 1)}
+              {describeRule(step.rule, t.reviews.rules)}
+              {isCurrent && review.steps.length > 1 && t.reviews.current}
             </p>
             <ul className="flex flex-col">
               {step.reviewers.map((reviewer) => (
                 <li key={reviewer.id}>
                   {reviewer.name} —{" "}
                   <span className={reviewer.decision === "approve" ? "text-green-700 dark:text-green-500" : reviewer.decision ? "text-amber-700 dark:text-amber-400" : "text-neutral-500"}>
-                    {reviewer.decision ? DECISION_TEXT[reviewer.decision] : "waiting"}
+                    {reviewer.decision === "approve"
+                      ? t.reviews.approvedMark
+                      : reviewer.decision
+                        ? t.reviews.changesMark
+                        : t.reviews.waiting}
                   </span>
                   {reviewer.note && <span className="text-neutral-500"> “{reviewer.note}”</span>}
                 </li>
@@ -103,12 +101,12 @@ export function ReviewPanel(props: Props) {
       {myTurn && <DecisionButtons requestId={review.id} />}
       {lateReviewer && (
         <p role="status" className="text-neutral-500">
-          Settled by {deciders.join(", ")} before you decided. Your decision is no longer needed.
+          {t.reviews.settledBy(deciders.join(", "))}
         </p>
       )}
 
       {review.status === "stale" && (
-        <p className="text-neutral-500">A newer version was uploaded while this review was running.</p>
+        <p className="text-neutral-500">{t.reviews.staleText}</p>
       )}
       {review.status !== "active" && props.canRequest && (
         <RequestReviewButton
@@ -116,7 +114,7 @@ export function ReviewPanel(props: Props) {
           defaultVersionId={latestVersion.id}
           // Restart with the same people and rules.
           initialSteps={review.steps.map((step) => ({ reviewers: step.reviewers.map((r) => r.id), rule: step.rule }))}
-          label={review.status === "stale" ? `Restart review on v${latestVersion.number}` : "Request another review"}
+          label={review.status === "stale" ? t.reviews.restartOn(latestVersion.number) : t.reviews.another}
         />
       )}
     </section>

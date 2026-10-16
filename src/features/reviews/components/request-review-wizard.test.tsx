@@ -92,7 +92,7 @@ describe("RequestReviewWizard", () => {
     await user.type(approvals, "2");
 
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(await within(approval).findByText("Can't need more approvals than reviewers (1).")).toBeInTheDocument();
+    expect(await within(approval).findByText("Can't need more approvals than there are reviewers.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Request review" })).not.toBeInTheDocument();
 
     // Switching the rule back to "all" clears the problem.

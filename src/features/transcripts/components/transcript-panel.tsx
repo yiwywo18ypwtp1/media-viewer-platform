@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { PlaybackUrls } from "@/features/player/playback";
 import { seekTo, usePlayer } from "@/features/player/player-context";
 import { formatTimecode } from "@/features/player/timecode";
+import { useI18n } from "@/i18n/client";
 import type { TranscriptLine } from "../queries";
 
 const SEARCH_DELAY_MS = 250;
@@ -12,6 +13,7 @@ const SEARCH_DELAY_MS = 250;
 // jumps the player there. Lines come from the API, filtered in Postgres.
 export function TranscriptPanel({ versionId, state }: { versionId: string; state: PlaybackUrls["transcript"] }) {
   const { videoRef, rate } = usePlayer();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState<TranscriptLine[] | null>(null);
   const [error, setError] = useState(false);
@@ -41,22 +43,22 @@ export function TranscriptPanel({ versionId, state }: { versionId: string; state
   if (state === null) return null;
 
   return (
-    <section aria-label="Transcript" className="flex flex-col gap-2 text-sm">
-      <h2 className="font-semibold">Transcript</h2>
-      {(state === "pending" || state === "running") && <p className="text-neutral-500">Transcribing the audio…</p>}
-      {state === "failed" && <p className="text-neutral-500">The audio couldn’t be transcribed.</p>}
+    <section aria-label={t.transcript.title} className="flex flex-col gap-2 text-sm">
+      <h2 className="font-semibold">{t.transcript.title}</h2>
+      {(state === "pending" || state === "running") && <p className="text-neutral-500">{t.transcript.transcribing}</p>}
+      {state === "failed" && <p className="text-neutral-500">{t.transcript.failed}</p>}
       {state === "ready" && (
         <>
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search what was said…"
-            aria-label="Search the transcript"
+            placeholder={t.transcript.placeholder}
+            aria-label={t.transcript.search}
             className="rounded-md border border-neutral-300 bg-transparent px-3 py-1.5 dark:border-neutral-700"
           />
-          {error && <p role="alert" className="text-red-600">Couldn’t load the transcript.</p>}
-          {lines && lines.length === 0 && <p className="text-neutral-500">{query ? "Nothing found." : "No speech found."}</p>}
+          {error && <p role="alert" className="text-red-600">{t.transcript.loadFailed}</p>}
+          {lines && lines.length === 0 && <p className="text-neutral-500">{query ? t.transcript.nothingFound : t.transcript.noSpeech}</p>}
           {lines && lines.length > 0 && (
             <ol className="flex max-h-64 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
               {lines.map((line) => (

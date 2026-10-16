@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, FormMessage } from "@/components/form";
+import { useI18n } from "@/i18n/client";
 import type { DecisionValue } from "../rules";
 
 // POST with an Idempotency-Key made once per click. If the network drops,
@@ -24,6 +25,7 @@ async function postDecision(requestId: string, body: object, key: string, retrie
 
 export function DecisionButtons({ requestId }: { requestId: string }) {
   const router = useRouter();
+  const { t, tm } = useI18n();
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<DecisionValue | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +37,10 @@ export function DecisionButtons({ requestId }: { requestId: string }) {
       const response = await postDecision(requestId, { decision, note: note || undefined }, crypto.randomUUID());
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        setError(body?.error?.message ?? "Couldn't save your decision.");
+        setError(body?.error?.message ? tm(body.error.message) : t.reviews.saveFailed);
       }
     } catch {
-      setError("You're offline. Try again.");
+      setError(t.common.offline);
     } finally {
       setPending(null);
       // Success, or "someone settled it first": either way show the current state.
@@ -49,8 +51,8 @@ export function DecisionButtons({ requestId }: { requestId: string }) {
   return (
     <div className="flex flex-col gap-2">
       <textarea
-        aria-label="Note for the requester (optional)"
-        placeholder="Note (optional)"
+        aria-label={t.reviews.note}
+        placeholder={t.reviews.notePlaceholder}
         rows={2}
         value={note}
         onChange={(event) => setNote(event.target.value)}
@@ -58,7 +60,7 @@ export function DecisionButtons({ requestId }: { requestId: string }) {
       />
       <div className="flex gap-2">
         <Button type="button" disabled={pending !== null} onClick={() => void decide("approve")} className="bg-green-700 px-3 py-1 hover:bg-green-600">
-          {pending === "approve" ? "Approving…" : "Approve"}
+          {pending === "approve" ? t.reviews.approving : t.reviews.approve}
         </Button>
         <Button
           type="button"
@@ -66,7 +68,7 @@ export function DecisionButtons({ requestId }: { requestId: string }) {
           onClick={() => void decide("request_changes")}
           className="bg-amber-600 px-3 py-1 hover:bg-amber-500"
         >
-          {pending === "request_changes" ? "Sending…" : "Request changes"}
+          {pending === "request_changes" ? t.common.sending : t.reviews.requestChanges}
         </Button>
       </div>
       {error && <FormMessage tone="error">{error}</FormMessage>}

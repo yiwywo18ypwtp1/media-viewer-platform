@@ -74,8 +74,12 @@ export function applyDecision(
   return { ok: true, state: { ...state, status, currentStep, decisions } };
 }
 
-export function describeRule(rule: Rule): string {
-  if (rule === "all") return "all must approve";
-  if (rule === "any") return "any one decides";
-  return `at least ${rule.atLeast} must approve`;
+// Words come from the caller's dictionary (i18n), so this stays pure.
+export function describeRule(
+  rule: Rule,
+  words: { all: string; any: string; atLeast: (n: number) => string },
+): string {
+  if (rule === "all") return words.all;
+  if (rule === "any") return words.any;
+  return words.atLeast(rule.atLeast);
 }

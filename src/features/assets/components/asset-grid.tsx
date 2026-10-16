@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ProcessingBadge } from "@/features/processing/components/processing-badge";
+import { getI18n } from "@/i18n/server";
 import { formatDuration } from "@/lib/format";
 import type { AssetListItem } from "../queries";
 import { StatusBadge } from "./badges";
@@ -8,7 +9,8 @@ import { NewVersionButton } from "./new-version-button";
 
 type Props = { projectId: string; assets: AssetListItem[]; canUpload: boolean };
 
-export function AssetGrid({ projectId, assets, canUpload }: Props) {
+export async function AssetGrid({ projectId, assets, canUpload }: Props) {
+  const { t } = await getI18n();
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {assets.map((asset) => (
@@ -21,7 +23,7 @@ export function AssetGrid({ projectId, assets, canUpload }: Props) {
               <Image src={asset.posterUrl} alt="" fill sizes="(min-width: 1024px) 25vw, 50vw" className="object-cover" />
             ) : (
               <span className="absolute inset-0 flex items-center justify-center text-xs uppercase text-neutral-400">
-                {asset.kind}
+                {t.assets.kind[asset.kind]}
               </span>
             )}
             {asset.latest.durationMs !== null && (

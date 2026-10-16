@@ -8,6 +8,7 @@ import { seekTo, stepFrames, togglePlay } from "@/features/player/player-context
 import { formatTimecode, frameRate, type FrameRate } from "@/features/player/timecode";
 import { useVideoSource } from "@/features/player/use-video-source";
 import { useVideoTime } from "@/features/player/use-video-time";
+import { useI18n } from "@/i18n/client";
 import { followerTarget } from "../sync";
 
 export type CompareSide = {
@@ -26,6 +27,7 @@ type Mode = "side" | "wipe";
 // follows its play/pause and time (see followerTarget). Sound comes from the
 // leader only; two soundtracks at once help nobody.
 export function CompareView({ kind, left, right, members }: Props) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>("side");
   const [wipe, setWipe] = useState(50);
   const leftRef = useRef<HTMLVideoElement>(null);
@@ -130,7 +132,7 @@ export function CompareView({ kind, left, right, members }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Compare mode">
+      <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label={t.compare.mode}>
         {(["side", "wipe"] as const).map((value) => (
           <button
             key={value}
@@ -139,13 +141,13 @@ export function CompareView({ kind, left, right, members }: Props) {
             onClick={() => setMode(value)}
             className={`rounded px-2 py-1 ${mode === value ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900" : "hover:bg-neutral-100 dark:hover:bg-neutral-800"}`}
           >
-            {value === "side" ? "Side by side" : "Wipe"}
+            {value === "side" ? t.compare.side : t.compare.wipe}
           </button>
         ))}
         {mode === "wipe" && (
           <label className="flex items-center gap-2 text-xs text-neutral-500">
             v{left.number}
-            <input type="range" min={0} max={100} value={wipe} onChange={(event) => setWipe(Number(event.target.value))} aria-label="Wipe position" />
+            <input type="range" min={0} max={100} value={wipe} onChange={(event) => setWipe(Number(event.target.value))} aria-label={t.compare.wipePosition} />
             v{right.number}
           </label>
         )}
@@ -177,12 +179,12 @@ export function CompareView({ kind, left, right, members }: Props) {
       {kind === "video" && (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <button type="button" className="w-14 text-left" onClick={() => leaderRef.current && togglePlay(leaderRef.current)}>
-            {playing ? "Pause" : "Play"}
+            {playing ? t.player.pause : t.player.play}
           </button>
-          <button type="button" aria-label="Previous frame" onClick={() => leaderRef.current && stepFrames(leaderRef.current, leaderRate, -1)}>
+          <button type="button" aria-label={t.player.previousFrame} onClick={() => leaderRef.current && stepFrames(leaderRef.current, leaderRate, -1)}>
             ‹
           </button>
-          <button type="button" aria-label="Next frame" onClick={() => leaderRef.current && stepFrames(leaderRef.current, leaderRate, 1)}>
+          <button type="button" aria-label={t.player.nextFrame} onClick={() => leaderRef.current && stepFrames(leaderRef.current, leaderRate, 1)}>
             ›
           </button>
           <input
@@ -192,7 +194,7 @@ export function CompareView({ kind, left, right, members }: Props) {
             max={duration}
             step="any"
             defaultValue={0}
-            aria-label="Seek both"
+            aria-label={t.compare.seekBoth}
             onChange={(event) => seekBoth(Number(event.target.value))}
             className="min-w-40 flex-1"
           />
@@ -227,10 +229,11 @@ function SyncedVideo({ videoRef, urls, muted }: { videoRef: RefObject<HTMLVideoE
 // Each version's comments on its own side. Timecodes seek both videos.
 function CommentList(props: { side: CompareSide; rate: FrameRate; members: Member[]; onSeek?: (seconds: number) => void }) {
   const { side, rate } = props;
+  const { t } = useI18n();
   return (
-    <section aria-label={`Comments on v${side.number}`} className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold">Comments on v{side.number}</h2>
-      {side.comments.length === 0 && <p className="text-sm text-neutral-500">No comments.</p>}
+    <section aria-label={t.compare.commentsOn(side.number)} className="flex flex-col gap-2">
+      <h2 className="text-sm font-semibold">{t.compare.commentsOn(side.number)}</h2>
+      {side.comments.length === 0 && <p className="text-sm text-neutral-500">{t.compare.noComments}</p>}
       <ol className="flex flex-col gap-2">
         {side.comments.map((comment) => (
           <li key={comment.id} className={`rounded-md border border-neutral-200 px-3 py-2 dark:border-neutral-800 ${comment.resolvedAt ? "opacity-60" : ""}`}>
@@ -242,7 +245,7 @@ function CommentList(props: { side: CompareSide; rate: FrameRate; members: Membe
                   {comment.rangeEndMs !== null && `–${formatTimecode(comment.rangeEndMs / 1000, rate)}`}
                 </button>
               )}
-              {comment.replies.length > 0 && <span>{comment.replies.length} repl{comment.replies.length === 1 ? "y" : "ies"}</span>}
+              {comment.replies.length > 0 && <span>{t.comments.repliesCount(comment.replies.length)}</span>}
             </div>
             <CommentBody body={comment.body} mentions={comment.mentions} members={props.members} />
           </li>

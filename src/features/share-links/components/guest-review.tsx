@@ -15,6 +15,7 @@ import { Player } from "@/features/player/components/player";
 import type { PlaybackUrls } from "@/features/player/playback";
 import { PlayerProvider, seekTo, useOptionalPlayer } from "@/features/player/player-context";
 import { formatTimecode } from "@/features/player/timecode";
+import { useI18n } from "@/i18n/client";
 import { guestNameSchema } from "../schema";
 
 type Props = {
@@ -40,6 +41,7 @@ export function GuestReview(props: Props) {
 
 function GuestWorkspace(props: Props) {
   const router = useRouter();
+  const { t, tm } = useI18n();
   const player = useOptionalPlayer();
   const [threads, setThreads] = useState(props.comments);
   const [markers, setMarkers] = useState(props.markers);
@@ -63,8 +65,8 @@ function GuestWorkspace(props: Props) {
   if (revoked) {
     return (
       <div role="alert" className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">This link was turned off</h2>
-        <p className="text-sm text-neutral-500">You can no longer watch or comment here.</p>
+        <h2 className="text-lg font-semibold">{t.share.turnedOffTitle}</h2>
+        <p className="text-sm text-neutral-500">{t.share.turnedOffText}</p>
       </div>
     );
   }
@@ -85,14 +87,14 @@ function GuestWorkspace(props: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: crypto.randomUUID(), parentId: null, guestName: guestName.value, ...values }),
     }).catch(() => null);
-    if (!response) return "You're offline. Try again.";
+    if (!response) return t.common.offline;
     if (response.status === 404) {
       // Revoked or expired while open: the page will say so.
       router.refresh();
-      return "This link is no longer available.";
+      return t.share.noLonger;
     }
     const data = await response.json().catch(() => null);
-    if (!response.ok) return data?.error?.message ?? "Couldn't send the comment.";
+    if (!response.ok) return data?.error?.message ? tm(data.error.message) : t.share.sendFailed;
     const change = { type: "upsert" as const, comment: data as CommentDto };
     setThreads((prev) => applyCommentChange(prev, change));
     setMarkers((prev) => applyMarkerChange(prev, change));
@@ -114,20 +116,20 @@ function GuestWorkspace(props: Props) {
         )}
       </div>
 
-      <section aria-label="Comments" className="flex flex-col gap-4">
-        <h2 className="text-sm font-semibold">Comments</h2>
+      <section aria-label={t.comments.title} className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold">{t.comments.title}</h2>
         {props.allowComments &&
           (guestName.value ? (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-neutral-500">
-                Commenting as <span className="font-medium text-neutral-900 dark:text-neutral-100">{guestName.value}</span>{" "}
+                {t.share.commentingAs} <span className="font-medium text-neutral-900 dark:text-neutral-100">{guestName.value}</span>{" "}
                 <button type="button" className="underline" onClick={() => guestName.set(null)}>
-                  change
+                  {t.share.change}
                 </button>
               </p>
               <CommentForm
                 members={[]}
-                submitLabel="Comment"
+                submitLabel={t.comments.comment}
                 withTimecode={Boolean(props.video)}
                 draftKey={`guest-comment-draft:${props.token}`}
                 // Guests have no member list, so the form's mentions are always empty.
@@ -139,7 +141,7 @@ function GuestWorkspace(props: Props) {
           ))}
 
         {threads.length === 0 ? (
-          <p className="text-sm text-neutral-500">No comments yet.</p>
+          <p className="text-sm text-neutral-500">{t.comments.none}</p>
         ) : (
           <ol className="flex flex-col gap-3">
             {threads.map((thread) => (
@@ -166,18 +168,19 @@ function GuestWorkspace(props: Props) {
 
 function GuestComment({ comment, onSelect }: { comment: CommentDto; onSelect: (id: string) => void }) {
   const player = useOptionalPlayer();
+  const { t } = useI18n();
   return (
     <article className="flex flex-col gap-1">
       <header className="flex flex-wrap items-baseline gap-2 text-xs text-neutral-500">
         <span className="font-medium text-neutral-900 dark:text-neutral-100">{comment.author.name}</span>
-        {comment.author.id === null && <span>(guest)</span>}
+        {comment.author.id === null && <span>{t.comments.guest}</span>}
         {comment.timecodeMs !== null && player && (
           <button type="button" className="font-mono text-blue-700 underline dark:text-blue-400" onClick={() => onSelect(comment.id)}>
             {formatTimecode(comment.timecodeMs / 1000, player.rate)}
             {comment.rangeEndMs !== null && `–${formatTimecode(comment.rangeEndMs / 1000, player.rate)}`}
           </button>
         )}
-        {comment.annotation && <span>✎ drawing</span>}
+        {comment.annotation && <span>{t.comments.drawing}</span>}
       </header>
       <CommentBody body={comment.body} mentions={[]} members={[]} />
     </article>
@@ -185,17 +188,18 @@ function GuestComment({ comment, onSelect }: { comment: CommentDto; onSelect: (i
 }
 
 function GuestNameForm({ onSave }: { onSave: (name: string) => void }) {
+  const { t } = useI18n();
   const form = useForm({ resolver: zodResolver(guestNameSchema), defaultValues: { name: "" } });
   const { errors } = form.formState;
   return (
     <form onSubmit={form.handleSubmit(({ name }) => onSave(name))} noValidate className="flex flex-col gap-2">
       <label htmlFor="guest-name" className="text-sm">
-        Your name, shown with your comments
+        {t.share.yourName}
       </label>
       <div className="flex gap-2">
         <Input id="guest-name" aria-invalid={Boolean(errors.name)} className="flex-1" {...form.register("name")} />
         <Button type="submit" className="px-3 py-1">
-          Continue
+          {t.share.continue}
         </Button>
       </div>
       {errors.name && <FormMessage tone="error">{errors.name.message}</FormMessage>}

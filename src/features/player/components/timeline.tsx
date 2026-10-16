@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, type PointerEvent } from "react";
+import { useI18n } from "@/i18n/client";
 import type { PlaybackUrls } from "../playback";
 import { seekTo, usePlayer } from "../player-context";
 import { spriteCellAt } from "../sprite";
@@ -23,6 +24,7 @@ export function Timeline({
   sprite?: PlaybackUrls["sprite"];
 }) {
   const { videoRef, rate, durationSeconds } = usePlayer();
+  const { t } = useI18n();
   const trackRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -68,18 +70,19 @@ export function Timeline({
   return (
     <div className="flex flex-col gap-1">
       {markers.length > 0 && (
-        <div className="relative h-3" role="group" aria-label="Comment markers">
+        <div className="relative h-3" role="group" aria-label={t.player.markers}>
           {markers.map((marker) => {
             const isRange = marker.endMs != null;
-            const where = isRange
-              ? `from ${formatTimecode(marker.timeMs / 1000, rate)} to ${formatTimecode(marker.endMs! / 1000, rate)}`
-              : `at ${formatTimecode(marker.timeMs / 1000, rate)}`;
+            const at = formatTimecode(marker.timeMs / 1000, rate);
+            const label = isRange
+              ? t.player.markerRange(at, formatTimecode(marker.endMs! / 1000, rate), marker.label)
+              : t.player.markerAt(at, marker.label);
             return (
               <button
                 key={marker.id}
                 type="button"
                 onClick={() => onMarkerSelect(marker.id)}
-                aria-label={`Comment ${where}, ${marker.label}`}
+                aria-label={label}
                 title={marker.label}
                 style={{
                   left: `${percentOf(marker.timeMs)}%`,
@@ -98,7 +101,7 @@ export function Timeline({
         ref={trackRef}
         role="slider"
         tabIndex={0}
-        aria-label="Seek"
+        aria-label={t.player.seek}
         aria-valuemin={0}
         aria-valuemax={Number(durationSeconds.toFixed(2))}
         // Initial value only: updated from the ref above. React leaves it alone

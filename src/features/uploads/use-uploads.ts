@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/i18n/client";
 import type { PickedFile } from "./collect-files";
 import { isExpired, sentBytes, type ResumeRecord } from "./resume";
 import { deleteRecord, listRecords } from "./resume-store";
@@ -18,6 +19,7 @@ export type UnfinishedUpload = { key: string; uploadId: string; fileName: string
 // the bottleneck, so more parallel files wouldn't finish the batch sooner.
 export function useUploads(target: { projectId: string; assetId?: string; folderId?: string | null }) {
   const router = useRouter();
+  const { t, tm } = useI18n();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [rejected, setRejected] = useState<string[]>([]);
   const [announcement, setAnnouncement] = useState("");
@@ -72,9 +74,9 @@ export function useUploads(target: { projectId: string; assetId?: string; folder
     for (const entry of picked) {
       const { file } = entry;
       if (!isAllowedMimeType(file.type)) {
-        problems.push(`${file.name}: unsupported file type.`);
+        problems.push(t.uploads.unsupported(file.name));
       } else if (file.size === 0 || file.size > MAX_FILE_SIZE) {
-        problems.push(`${file.name}: files must be between 1 byte and 5 GB.`);
+        problems.push(t.uploads.badSize(file.name));
       } else if (accepted.length >= MAX_FILES_PER_BATCH) {
         overLimit += 1;
       } else {
@@ -82,7 +84,7 @@ export function useUploads(target: { projectId: string; assetId?: string; folder
       }
     }
     // One line for the overflow: a dropped folder can hold hundreds of files.
-    if (overLimit > 0) problems.push(`${overLimit} more file(s) skipped: only ${MAX_FILES_PER_BATCH} at a time.`);
+    if (overLimit > 0) problems.push(t.uploads.skipped(overLimit, MAX_FILES_PER_BATCH));
     setRejected(problems);
 
     for (const { file, folderPath } of accepted) {
@@ -94,14 +96,14 @@ export function useUploads(target: { projectId: string; assetId?: string; folder
           lastStatus = snapshot.status;
           void loadUnfinished();
           if (snapshot.status === "uploading" && snapshot.resumedBytes > 0) {
-            setAnnouncement(`${file.name}: continuing an earlier upload.`);
+            setAnnouncement(t.uploads.continuing(file.name));
           }
         }
         if (snapshot.status === "done") {
-          setAnnouncement(`${file.name} uploaded.`);
+          setAnnouncement(t.uploads.uploaded(file.name));
           router.refresh(); // re-render the server-side asset list
         } else if (snapshot.status === "error") {
-          setAnnouncement(`${file.name} failed: ${snapshot.error}`);
+          setAnnouncement(t.uploads.failedWith(file.name, tm(snapshot.error ?? "")));
         }
         if (!upload.isActive) startNextIfIdle();
       });

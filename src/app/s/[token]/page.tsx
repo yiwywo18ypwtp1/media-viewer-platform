@@ -5,6 +5,8 @@ import { GuestReview } from "@/features/share-links/components/guest-review";
 import { PasswordForm } from "@/features/share-links/components/password-form";
 import { GUEST_URL_TTL_SECONDS } from "@/features/share-links/link-state";
 import { getShareAccess, sharePath } from "@/features/share-links/server";
+import { LocaleSwitcher } from "@/i18n/locale-switcher";
+import { getI18n } from "@/i18n/server";
 import { getEnv } from "@/server/env";
 
 // Link previews (Open Graph) show the poster, but only for links without a
@@ -12,9 +14,10 @@ import { getEnv } from "@/server/env";
 export async function generateMetadata({ params }: PageProps<"/s/[token]">): Promise<Metadata> {
   const { token } = await params;
   const access = await getShareAccess(token);
-  if (!access) return { title: "Link unavailable · Media Review Hub", robots: { index: false } };
+  const { t } = await getI18n();
+  if (!access) return { title: t.share.titleUnavailable, robots: { index: false } };
   const isPublic = access.link.passwordHash === null;
-  const title = isPublic ? `${access.asset.name} · Media Review Hub` : "Shared with you · Media Review Hub";
+  const title = isPublic ? t.share.titlePublic(access.asset.name) : t.share.titleProtected;
   return {
     title,
     robots: { index: false },
@@ -28,10 +31,14 @@ export async function generateMetadata({ params }: PageProps<"/s/[token]">): Pro
 export default async function SharePage({ params }: PageProps<"/s/[token]">) {
   const { token } = await params;
   const access = await getShareAccess(token);
+  const { t } = await getI18n();
 
   const shell = (children: React.ReactNode) => (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-6 py-8">
-      <p className="text-sm font-semibold tracking-wide text-neutral-500">Media Review Hub</p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold tracking-wide text-neutral-500">Media Review Hub</p>
+        <LocaleSwitcher />
+      </div>
       {children}
     </main>
   );
@@ -40,8 +47,8 @@ export default async function SharePage({ params }: PageProps<"/s/[token]">) {
   if (!access) {
     return shell(
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">This link isn’t available</h1>
-        <p className="text-sm text-neutral-500">It may have expired or been turned off. Ask the person who shared it for a new one.</p>
+        <h1 className="text-2xl font-semibold">{t.share.unavailableTitle}</h1>
+        <p className="text-sm text-neutral-500">{t.share.unavailableText}</p>
       </div>,
     );
   }
@@ -49,7 +56,7 @@ export default async function SharePage({ params }: PageProps<"/s/[token]">) {
   if (!access.unlocked) {
     return shell(
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">This link is protected</h1>
+        <h1 className="text-2xl font-semibold">{t.share.protectedTitle}</h1>
         <PasswordForm token={token} />
       </div>,
     );
@@ -60,7 +67,7 @@ export default async function SharePage({ params }: PageProps<"/s/[token]">) {
     return shell(
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">{asset.name}</h1>
-        <p className="text-sm text-neutral-500">This version is still being prepared. Check back in a few minutes.</p>
+        <p className="text-sm text-neutral-500">{t.share.preparing}</p>
       </div>,
     );
   }
@@ -76,11 +83,11 @@ export default async function SharePage({ params }: PageProps<"/s/[token]">) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{asset.name}</h1>
-          <p className="text-xs text-neutral-500">Version {version.number}</p>
+          <p className="text-xs text-neutral-500">{t.share.versionLabel(version.number)}</p>
         </div>
         {link.allowDownload && (
           <a href={`${sharePath(token)}/download`} className="text-sm underline">
-            Download original
+            {t.share.downloadOriginal}
           </a>
         )}
       </div>

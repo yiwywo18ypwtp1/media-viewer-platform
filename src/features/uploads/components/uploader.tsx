@@ -1,20 +1,11 @@
 "use client";
 
 import { useRef, useState, type DragEvent } from "react";
+import { useI18n } from "@/i18n/client";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { filesFromDrop, filesFromInput } from "../collect-files";
 import { ALLOWED_MIME_TYPES, MAX_FILES_PER_BATCH } from "../schema";
 import { useUploads, type UploadItem } from "../use-uploads";
-
-const STATUS_LABELS = {
-  queued: "Waiting",
-  uploading: "Uploading",
-  paused: "Paused",
-  completing: "Verifying",
-  done: "Uploaded",
-  error: "Failed",
-  cancelled: "Cancelled",
-} as const;
 
 type Props = {
   projectId: string;
@@ -26,6 +17,7 @@ type Props = {
 
 export function Uploader({ projectId, assetId, folderId }: Props) {
   const uploads = useUploads({ projectId, assetId, folderId });
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -46,7 +38,7 @@ export function Uploader({ projectId, assetId, folderId }: Props) {
   const hasFinished = uploads.items.some((item) => ["done", "cancelled"].includes(item.snapshot.status));
 
   return (
-    <section className="flex flex-col gap-3" aria-label="Upload files">
+    <section className="flex flex-col gap-3" aria-label={t.uploads.region}>
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -59,22 +51,22 @@ export function Uploader({ projectId, assetId, folderId }: Props) {
         }`}
       >
         <p>
-          Drop videos or images here, or{" "}
+          {t.uploads.dropHere}{" "}
           <button type="button" className="underline" onClick={() => inputRef.current?.click()}>
-            choose files
+            {t.uploads.chooseFiles}
           </button>
           {allowFolders && (
             <>
-              {" or "}
+              {` ${t.uploads.or} `}
               <button type="button" className="underline" onClick={() => folderInputRef.current?.click()}>
-                a folder
+                {t.uploads.aFolder}
               </button>
             </>
           )}
         </p>
         <p className="text-neutral-500">
-          Up to {MAX_FILES_PER_BATCH} files at a time, 5 GB each. MP4, MOV, WebM, JPEG, PNG, WebP.
-          {allowFolders && " Dropped folders keep their structure."}
+          {t.uploads.limits(MAX_FILES_PER_BATCH)}
+          {allowFolders && ` ${t.uploads.foldersKept}`}
         </p>
         <input
           ref={inputRef}
@@ -106,15 +98,15 @@ export function Uploader({ projectId, assetId, folderId }: Props) {
 
       {uploads.unfinished.length > 0 && (
         <div className="flex flex-col gap-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950">
-          <p className="font-medium">Unfinished uploads. Choose the same file again to continue where it stopped.</p>
+          <p className="font-medium">{t.uploads.unfinished}</p>
           <ul className="flex flex-col gap-1">
             {uploads.unfinished.map((entry) => (
               <li key={entry.key} className="flex items-center justify-between gap-3">
                 <span className="truncate">
-                  {entry.fileName} · {Math.floor((entry.sentBytes / entry.size) * 100)}% of {formatBytes(entry.size)}
+                  {t.uploads.unfinishedItem(entry.fileName, Math.floor((entry.sentBytes / entry.size) * 100), formatBytes(entry.size))}
                 </span>
                 <button type="button" className="shrink-0 underline" onClick={() => void uploads.discardUnfinished(entry)}>
-                  Discard
+                  {t.uploads.discard}
                 </button>
               </li>
             ))}
@@ -132,13 +124,13 @@ export function Uploader({ projectId, assetId, folderId }: Props) {
 
       {visible.length > 0 && (
         <div className="flex items-center gap-3 text-sm">
-          <progress className="h-2 flex-1" value={uploadedBytes} max={totalBytes || 1} aria-label="Total upload progress" />
+          <progress className="h-2 flex-1" value={uploadedBytes} max={totalBytes || 1} aria-label={t.uploads.totalProgress} />
           <span className="tabular-nums text-neutral-500">
             {formatBytes(uploadedBytes)} / {formatBytes(totalBytes)}
           </span>
           {hasFinished && (
             <button type="button" className="underline" onClick={uploads.dismissFinished}>
-              Clear finished
+              {t.uploads.clearFinished}
             </button>
           )}
         </div>
@@ -159,6 +151,7 @@ export function Uploader({ projectId, assetId, folderId }: Props) {
 }
 
 function UploadRow({ item, uploads }: { item: UploadItem; uploads: ReturnType<typeof useUploads> }) {
+  const { t, tm } = useI18n();
   const { status, uploadedBytes, totalBytes, bytesPerSecond, etaSeconds, resumedBytes, error } = item.snapshot;
   const percent = totalBytes > 0 ? Math.floor((uploadedBytes / totalBytes) * 100) : 0;
 
@@ -169,27 +162,28 @@ function UploadRow({ item, uploads }: { item: UploadItem; uploads: ReturnType<ty
           {item.name}
         </span>
         <span className="flex shrink-0 gap-3">
-          {status === "uploading" && <RowButton onClick={() => uploads.pause(item.id)}>Pause</RowButton>}
-          {status === "paused" && <RowButton onClick={() => uploads.resume(item.id)}>Resume</RowButton>}
-          {status === "error" && <RowButton onClick={() => uploads.retry(item.id)}>Retry</RowButton>}
+          {status === "uploading" && <RowButton onClick={() => uploads.pause(item.id)}>{t.uploads.pause}</RowButton>}
+          {status === "paused" && <RowButton onClick={() => uploads.resume(item.id)}>{t.uploads.resume}</RowButton>}
+          {status === "error" && <RowButton onClick={() => uploads.retry(item.id)}>{t.uploads.retry}</RowButton>}
           {["queued", "uploading", "paused", "error"].includes(status) && (
-            <RowButton onClick={() => uploads.cancel(item.id)}>Cancel</RowButton>
+            <RowButton onClick={() => uploads.cancel(item.id)}>{t.common.cancel}</RowButton>
           )}
         </span>
       </div>
-      <progress className="h-1.5 w-full" value={uploadedBytes} max={totalBytes} aria-label={`${item.name} progress`} />
+      <progress className="h-1.5 w-full" value={uploadedBytes} max={totalBytes} aria-label={t.uploads.progressOf(item.name)} />
       <div className="flex justify-between gap-3 text-xs text-neutral-500 tabular-nums">
         <span>
-          {STATUS_LABELS[status]} · {percent}% · {formatBytes(uploadedBytes)} of {formatBytes(totalBytes)}
-          {resumedBytes > 0 && status !== "done" && ` · resumed at ${Math.floor((resumedBytes / totalBytes) * 100)}%`}
+          {t.uploads.row(t.uploads.statuses[status], percent, formatBytes(uploadedBytes), formatBytes(totalBytes))}
+          {resumedBytes > 0 && status !== "done" && t.uploads.resumedAt(Math.floor((resumedBytes / totalBytes) * 100))}
         </span>
         {status === "uploading" && bytesPerSecond !== null && (
           <span>
-            {formatBytes(bytesPerSecond)}/s{etaSeconds !== null && ` · ${formatDuration(etaSeconds)} left`}
+            {t.uploads.speed(formatBytes(bytesPerSecond))}
+            {etaSeconds !== null && t.uploads.left(formatDuration(etaSeconds))}
           </span>
         )}
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-600">{tm(error)}</p>}
     </li>
   );
 }

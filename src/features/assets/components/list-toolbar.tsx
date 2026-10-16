@@ -1,42 +1,40 @@
 import Link from "next/link";
-import { STATUS_FILTER_LABELS } from "../labels";
+import { getI18n } from "@/i18n/server";
 import { listHref, SORTS, STATUS_FILTERS, VIEWS, type ListParams } from "../list-params";
-
-const VIEW_LABELS = { grid: "Grid", table: "Table" } as const;
-const SORT_LABELS = { updated: "Last updated", created: "Date added", name: "Name" } as const;
 
 // Every control is a plain link to a URL with the changed param: no client JS,
 // no state to sync. The server renders the list for whatever the URL says.
-export function ListToolbar({ projectId, params }: { projectId: string; params: ListParams }) {
+export async function ListToolbar({ projectId, params }: { projectId: string; params: ListParams }) {
+  const { t } = await getI18n();
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-      <nav aria-label="Filter by status" className="flex flex-wrap gap-1">
+      <nav aria-label={t.assets.filterByStatus} className="flex flex-wrap gap-1">
         {STATUS_FILTERS.map((status) => (
           <ToolbarLink
             key={status}
             href={listHref(projectId, params, { status })}
             active={params.status === status}
           >
-            {STATUS_FILTER_LABELS[status]}
+            {status === "all" ? t.assets.all : t.assets.status[status]}
           </ToolbarLink>
         ))}
       </nav>
       <div className="flex flex-wrap items-center gap-4">
         {/* The table sorts by its column headers; the grid needs its own control. */}
         {params.view === "grid" && (
-          <nav aria-label="Sort" className="flex items-center gap-1">
-            <span className="text-neutral-500">Sort:</span>
+          <nav aria-label={t.assets.sort} className="flex items-center gap-1">
+            <span className="text-neutral-500">{t.assets.sortLabel}</span>
             {SORTS.map((sort) => (
               <ToolbarLink key={sort} href={listHref(projectId, params, { sort })} active={params.sort === sort}>
-                {SORT_LABELS[sort]}
+                {t.assets.sorts[sort]}
               </ToolbarLink>
             ))}
           </nav>
         )}
-        <nav aria-label="View" className="flex gap-1">
+        <nav aria-label={t.assets.view} className="flex gap-1">
           {VIEWS.map((view) => (
             <ToolbarLink key={view} href={listHref(projectId, params, { view })} active={params.view === view}>
-              {VIEW_LABELS[view]}
+              {t.assets.views[view]}
             </ToolbarLink>
           ))}
         </nav>

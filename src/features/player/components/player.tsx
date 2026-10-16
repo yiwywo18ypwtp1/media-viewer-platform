@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlaybackUrls } from "../playback";
 import { seekTo, showCaptions, stepFrames, togglePlay, usePlayer } from "../player-context";
+import { useI18n } from "@/i18n/client";
 import { AUTO_QUALITY, useVideoSource } from "../use-video-source";
 import { ShortcutsDialog } from "./shortcuts-dialog";
 import { Timeline, type TimelineMarker } from "./timeline";
@@ -33,7 +34,8 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [captions, setCaptions] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const { t } = useI18n();
   const resumeAt = useRef<{ time: number; play: boolean } | null>(null);
   // Whether the user wants playback. Kept separately because on a media error
   // the browser marks the element paused *before* the "pause" event fires.
@@ -74,14 +76,14 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
     if (source.usingHls) return;
     const video = videoRef.current;
     if (!video || Date.now() - lastRefresh.current < 30_000) {
-      setError("Playback failed. Reload the page to try again.");
+      setFailed(true);
       return;
     }
     lastRefresh.current = Date.now();
     resumeAt.current = { time: video.currentTime, play: wantsToPlay.current };
     const response = await fetch(refreshUrl);
     if (!response.ok) {
-      setError("Playback failed. Reload the page to try again.");
+      setFailed(true);
       return;
     }
     setUrls((await response.json()) as PlaybackUrls);
@@ -196,13 +198,13 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
             crossOrigin={subtitles ? "anonymous" : undefined}
             className={`w-full object-contain ${fullscreen ? "h-full" : "max-h-[70vh]"}`}
           >
-            {subtitles && <track kind="subtitles" src={subtitles.url} srcLang={subtitles.language ?? "und"} label="Transcript" />}
+            {subtitles && <track kind="subtitles" src={subtitles.url} srcLang={subtitles.language ?? "und"} label={t.transcript.title} />}
           </video>
           {/* Annotation layers are portaled in here (see annotation-layer.tsx). */}
           <div ref={setOverlayHost} className="pointer-events-none absolute inset-0" />
-          {(error || source.denied) && (
+          {(failed || source.denied) && (
             <p role="alert" className="absolute inset-x-0 bottom-4 text-center text-sm text-red-300">
-              {source.denied ? "This video is no longer available to you." : error}
+              {source.denied ? t.player.denied : t.player.failed}
             </p>
           )}
         </div>
@@ -213,22 +215,22 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
             <button
               type="button"
               onClick={() => videoRef.current && togglePlay(videoRef.current)}
-              aria-label={playing ? "Pause" : "Play"}
+              aria-label={playing ? t.player.pause : t.player.play}
               className="w-14 text-left"
             >
-              {playing ? "Pause" : "Play"}
+              {playing ? t.player.pause : t.player.play}
             </button>
-            <button type="button" aria-label="Previous frame" onClick={() => videoRef.current && stepFrames(videoRef.current, rate, -1)}>
+            <button type="button" aria-label={t.player.previousFrame} onClick={() => videoRef.current && stepFrames(videoRef.current, rate, -1)}>
               ‹
             </button>
-            <button type="button" aria-label="Next frame" onClick={() => videoRef.current && stepFrames(videoRef.current, rate, 1)}>
+            <button type="button" aria-label={t.player.nextFrame} onClick={() => videoRef.current && stepFrames(videoRef.current, rate, 1)}>
               ›
             </button>
             <TimecodeDisplay />
             <span className="text-xs text-neutral-400">{rate.fps.toFixed(rate.fps % 1 === 0 ? 0 : 3)} fps</span>
             <span className="flex-1" />
             <label className="flex items-center gap-1 text-xs">
-              <span className="sr-only">Speed</span>
+              <span className="sr-only">{t.player.speed}</span>
               <select
                 value={speed}
                 onChange={(event) => {
@@ -245,14 +247,14 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
             </label>
             {source.qualities.length > 1 && (
               <label className="flex items-center gap-1 text-xs">
-                <span className="sr-only">Quality</span>
+                <span className="sr-only">{t.player.quality}</span>
                 <select
                   value={source.quality}
                   onChange={(event) => source.setQuality(Number(event.target.value))}
                   className="rounded bg-white/10 px-1 py-0.5"
                 >
                   <option value={AUTO_QUALITY} className="text-black">
-                    Auto
+                    {t.player.auto}
                   </option>
                   {source.qualities.map((q) => (
                     <option key={q.level} value={q.level} className="text-black">
@@ -269,17 +271,17 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
               }}
               aria-pressed={muted}
             >
-              {muted ? "Unmute" : "Mute"}
+              {muted ? t.player.unmute : t.player.mute}
             </button>
             {subtitles && (
-              <button type="button" onClick={toggleCaptions} aria-pressed={captions} aria-label="Subtitles">
+              <button type="button" onClick={toggleCaptions} aria-pressed={captions} aria-label={t.player.subtitles}>
                 CC
               </button>
             )}
             <button type="button" onClick={toggleFullscreen} aria-pressed={fullscreen}>
-              {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              {fullscreen ? t.player.exitFullscreen : t.player.fullscreen}
             </button>
-            <button type="button" onClick={() => dialogRef.current?.showModal()} aria-label="Keyboard shortcuts">
+            <button type="button" onClick={() => dialogRef.current?.showModal()} aria-label={t.player.shortcuts}>
               ?
             </button>
           </div>

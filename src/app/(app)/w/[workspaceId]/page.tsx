@@ -10,6 +10,7 @@ import {
   listProjects,
 } from "@/features/workspaces/queries";
 import { can } from "@/features/workspaces/roles";
+import { getI18n } from "@/i18n/server";
 
 export default async function WorkspacePage({ params }: PageProps<"/w/[workspaceId]">) {
   const user = await requireUser();
@@ -17,6 +18,7 @@ export default async function WorkspacePage({ params }: PageProps<"/w/[workspace
   if (!access) notFound();
 
   const { workspace, role } = access;
+  const { t } = await getI18n();
   const canManage = can(role, "manageMembers");
   const [projects, members, invitations] = await Promise.all([
     listProjects(workspace.id),
@@ -28,15 +30,15 @@ export default async function WorkspacePage({ params }: PageProps<"/w/[workspace
     <div className="flex flex-col gap-10">
       <div>
         <Link href="/" className="text-sm text-neutral-500 hover:underline">
-          Workspaces
+          {t.workspaces.breadcrumb}
         </Link>
         <h1 className="text-2xl font-semibold">{workspace.name}</h1>
       </div>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Projects</h2>
+        <h2 className="text-lg font-semibold">{t.workspaces.projects}</h2>
         {projects.length === 0 ? (
-          <p className="text-sm text-neutral-500">No projects yet.</p>
+          <p className="text-sm text-neutral-500">{t.home.noProjects}</p>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-3">
             {projects.map((project) => (

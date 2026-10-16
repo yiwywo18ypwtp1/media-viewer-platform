@@ -1,8 +1,14 @@
-import type { ComponentProps, ReactNode } from "react";
+"use client";
 
-// Small presentational building blocks shared by all forms. No logic, no state.
+import type { ComponentProps, ReactNode } from "react";
+import { useI18n } from "@/i18n/client";
+
+// Small presentational building blocks shared by all forms. No state.
+// Error texts may come from shared schemas or the server (in English): they
+// are translated here, in one place (see i18n/translate.ts).
 
 export function Field(props: { label: string; htmlFor: string; error?: string; children: ReactNode }) {
+  const { tm } = useI18n();
   const errorId = `${props.htmlFor}-error`;
   return (
     <div className="flex flex-col gap-1">
@@ -12,7 +18,7 @@ export function Field(props: { label: string; htmlFor: string; error?: string; c
       {props.children}
       {props.error && (
         <p id={errorId} className="text-sm text-red-600">
-          {props.error}
+          {tm(props.error)}
         </p>
       )}
     </div>
@@ -47,10 +53,11 @@ export function Button({ className = "", ...props }: ComponentProps<"button">) {
 }
 
 export function FormMessage(props: { tone: "error" | "success"; children: ReactNode }) {
+  const { tm } = useI18n();
   const color = props.tone === "error" ? "text-red-600" : "text-green-700 dark:text-green-500";
   return (
     <p role={props.tone === "error" ? "alert" : "status"} className={`text-sm ${color}`}>
-      {props.children}
+      {typeof props.children === "string" ? tm(props.children) : props.children}
     </p>
   );
 }

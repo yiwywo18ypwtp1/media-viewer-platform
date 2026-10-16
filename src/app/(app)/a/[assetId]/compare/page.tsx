@@ -7,12 +7,14 @@ import { CompareView, type CompareSide } from "@/features/compare/components/com
 import { pickVersions } from "@/features/compare/sync";
 import { getPlaybackUrls } from "@/features/player/playback";
 import { listMembers } from "@/features/workspaces/queries";
+import { getI18n } from "@/i18n/server";
 
 export default async function ComparePage({ params, searchParams }: PageProps<"/a/[assetId]/compare">) {
   const user = await requireUser();
   const access = await getAssetAccess(user.id, (await params).assetId);
   if (!access) notFound();
   const { asset, workspace } = access;
+  const { t } = await getI18n();
 
   // Only processed versions can be played side by side.
   const versions = (await listVersions(asset.id)).filter((v) => v.processingState === "ready");
@@ -27,7 +29,7 @@ export default async function ComparePage({ params, searchParams }: PageProps<"/
     return (
       <div className="flex flex-col gap-3">
         {back}
-        <p className="text-sm text-neutral-500">Comparing needs two processed versions of this asset.</p>
+        <p className="text-sm text-neutral-500">{t.compare.needTwo}</p>
       </div>
     );
   }
@@ -39,7 +41,7 @@ export default async function ComparePage({ params, searchParams }: PageProps<"/
   const [left, right, members] = await Promise.all([side(picked.left), side(picked.right), listMembers(workspace.id)]);
 
   const picker = (param: "a" | "b", current: number, other: number) => (
-    <nav aria-label={param === "a" ? "Left version" : "Right version"} className="flex gap-1">
+    <nav aria-label={param === "a" ? t.compare.leftVersion : t.compare.rightVersion} className="flex gap-1">
       {versions.map((v) => {
         const next = param === "a" ? { a: v.number, b: other } : { a: other, b: v.number };
         return (
@@ -68,11 +70,11 @@ export default async function ComparePage({ params, searchParams }: PageProps<"/
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           {back}
-          <h1 className="text-2xl font-semibold">Compare versions</h1>
+          <h1 className="text-2xl font-semibold">{t.compare.title}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           {picker("a", picked.left.number, picked.right.number)}
-          <span className="text-neutral-500">vs</span>
+          <span className="text-neutral-500">{t.compare.vs}</span>
           {picker("b", picked.right.number, picked.left.number)}
         </div>
       </div>

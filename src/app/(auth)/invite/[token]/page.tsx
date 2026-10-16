@@ -1,25 +1,24 @@
 import Link from "next/link";
+import { getI18n } from "@/i18n/server";
 import { logout } from "@/features/auth/actions";
 import { getCurrentUser } from "@/features/auth/session";
 import { acceptInvitation } from "@/features/workspaces/actions";
 import { getPendingInvitation } from "@/features/workspaces/queries";
-import { ROLE_LABELS } from "@/features/workspaces/roles";
 
 // Public page (see proxy.ts): someone without an account must be able to see
 // the invitation, then sign up and come back here via ?next=.
 export default async function InvitePage({ params }: PageProps<"/invite/[token]">) {
+  const { t } = await getI18n();
   const { token } = await params;
   const [invitation, user] = await Promise.all([getPendingInvitation(token), getCurrentUser()]);
 
   if (!invitation) {
     return (
       <>
-        <h1 className="text-2xl font-semibold">Invitation not available</h1>
-        <p className="text-sm text-neutral-500">
-          This link was already used, revoked, or is older than 7 days. Ask for a new invitation.
-        </p>
+        <h1 className="text-2xl font-semibold">{t.invite.unavailable}</h1>
+        <p className="text-sm text-neutral-500">{t.invite.unavailableText}</p>
         <Link href="/" className="text-sm underline">
-          Go to Media Review Hub
+          {t.invite.goHome}
         </Link>
       </>
     );
@@ -29,10 +28,9 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">Join {invitation.workspaceName}</h1>
+      <h1 className="text-2xl font-semibold">{t.invite.join(invitation.workspaceName)}</h1>
       <p className="text-sm text-neutral-500">
-        {invitation.inviterName} invited <strong>{invitation.email}</strong> as{" "}
-        {ROLE_LABELS[invitation.role].toLowerCase()}.
+        {t.invite.invited(invitation.inviterName, t.roles[invitation.role].toLowerCase())} <strong>{invitation.email}</strong>
       </p>
 
       {!user && (
@@ -41,10 +39,10 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
             href={`/register?next=${encodeURIComponent(here)}`}
             className="rounded-md bg-neutral-900 px-4 py-2 text-center font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
           >
-            Create an account
+            {t.auth.createAccount}
           </Link>
           <Link href={`/login?next=${encodeURIComponent(here)}`} className="text-center underline">
-            I already have an account
+            {t.invite.haveAccount}
           </Link>
         </div>
       )}
@@ -55,7 +53,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
             type="submit"
             className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
           >
-            Accept invitation
+            {t.invite.accept}
           </button>
         </form>
       )}
@@ -63,12 +61,11 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
       {user && user.email !== invitation.email && (
         <div className="flex flex-col gap-2 text-sm">
           <p>
-            You&apos;re signed in as <strong>{user.email}</strong>. This invitation is for{" "}
-            <strong>{invitation.email}</strong>.
+            {t.invite.signedInAs} <strong>{user.email}</strong>. {t.invite.invitationFor} <strong>{invitation.email}</strong>.
           </p>
           <form action={logout.bind(null, here)}>
             <button type="submit" className="underline">
-              Sign out and use the invited account
+              {t.invite.switchAccount}
             </button>
           </form>
         </div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProcessingBadge } from "@/features/processing/components/processing-badge";
+import { getI18n } from "@/i18n/server";
 import { formatBytes } from "@/lib/format";
 import { sortHref, type ListParams } from "../list-params";
 import type { AssetListItem } from "../queries";
@@ -8,28 +9,33 @@ import { NewVersionButton } from "./new-version-button";
 
 type Props = { projectId: string; params: ListParams; assets: AssetListItem[]; canUpload: boolean };
 
-const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
 
 // A plain server-rendered <table>: sorting happens in SQL via the URL, so the
 // table itself has no state. (A client table library would add a client
 // boundary and bundle size without anything to do.)
-export function AssetTable({ projectId, params, assets, canUpload }: Props) {
+export async function AssetTable({ projectId, params, assets, canUpload }: Props) {
+  const { t, locale } = await getI18n();
+  const dateFormat = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  });
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-neutral-200 text-neutral-500 dark:border-neutral-800">
           <tr>
             <SortableHeader projectId={projectId} params={params} sort="name">
-              Name
+              {t.assets.columns.name}
             </SortableHeader>
-            <th className="px-2 py-2 font-medium">Status</th>
-            <th className="px-2 py-2 font-medium">Version</th>
-            <th className="px-2 py-2 font-medium">Size</th>
+            <th className="px-2 py-2 font-medium">{t.assets.columns.status}</th>
+            <th className="px-2 py-2 font-medium">{t.assets.columns.version}</th>
+            <th className="px-2 py-2 font-medium">{t.assets.columns.size}</th>
             <SortableHeader projectId={projectId} params={params} sort="created">
-              Added
+              {t.assets.columns.added}
             </SortableHeader>
             <SortableHeader projectId={projectId} params={params} sort="updated">
-              Updated
+              {t.assets.columns.updated}
             </SortableHeader>
             {canUpload && <th className="px-2 py-2" />}
           </tr>
@@ -41,7 +47,7 @@ export function AssetTable({ projectId, params, assets, canUpload }: Props) {
                 <Link href={`/a/${asset.id}`} className="font-medium hover:underline">
                   {asset.name}
                 </Link>
-                <span className="ml-2 text-xs uppercase text-neutral-400">{asset.kind}</span>
+                <span className="ml-2 text-xs uppercase text-neutral-400">{t.assets.kind[asset.kind]}</span>
               </td>
               <td className="px-2 py-2">
                 <div className="flex flex-col items-start gap-1">

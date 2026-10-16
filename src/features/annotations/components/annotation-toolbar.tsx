@@ -1,20 +1,9 @@
 "use client";
 
+import { useI18n } from "@/i18n/client";
 import { COLORS, type Tool } from "../schema";
 
-const TOOLS: { tool: Tool; label: string }[] = [
-  { tool: "arrow", label: "Arrow" },
-  { tool: "rect", label: "Rectangle" },
-  { tool: "freehand", label: "Pen" },
-];
-
-const COLOR_NAMES: Record<(typeof COLORS)[number], string> = {
-  "#ef4444": "Red",
-  "#f59e0b": "Amber",
-  "#22c55e": "Green",
-  "#3b82f6": "Blue",
-  "#ffffff": "White",
-};
+const TOOLS: Tool[] = ["arrow", "rect", "freehand"];
 
 type Props = {
   tool: Tool;
@@ -29,9 +18,10 @@ type Props = {
 
 // Presentational: the comment form owns the state.
 export function AnnotationToolbar(props: Props) {
+  const { t } = useI18n();
   return (
-    <div role="toolbar" aria-label="Drawing tools" className="flex flex-wrap items-center gap-2 text-xs">
-      {TOOLS.map(({ tool, label }) => (
+    <div role="toolbar" aria-label={t.annotations.tools} className="flex flex-wrap items-center gap-2 text-xs">
+      {TOOLS.map((tool) => (
         <button
           key={tool}
           type="button"
@@ -39,15 +29,15 @@ export function AnnotationToolbar(props: Props) {
           onClick={() => props.onTool(tool)}
           className={`rounded px-2 py-1 ${props.tool === tool ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900" : "bg-neutral-100 dark:bg-neutral-800"}`}
         >
-          {label}
+          {t.annotations.toolNames[tool]}
         </button>
       ))}
-      <span className="flex gap-1" role="group" aria-label="Colour">
+      <span className="flex gap-1" role="group" aria-label={t.annotations.colour}>
         {COLORS.map((color) => (
           <button
             key={color}
             type="button"
-            aria-label={COLOR_NAMES[color]}
+            aria-label={t.annotations.colours[color]}
             aria-pressed={props.color === color}
             onClick={() => props.onColor(color)}
             style={{ backgroundColor: color }}
@@ -56,13 +46,13 @@ export function AnnotationToolbar(props: Props) {
         ))}
       </span>
       <button type="button" className="underline disabled:opacity-40" disabled={props.shapeCount === 0} onClick={props.onUndo}>
-        Undo
+        {t.annotations.undo}
       </button>
       <button type="button" className="underline disabled:opacity-40" disabled={props.shapeCount === 0} onClick={props.onClear}>
-        Clear
+        {t.annotations.clear}
       </button>
       <button type="button" className="underline" onClick={props.onDone}>
-        Done
+        {t.annotations.done}
       </button>
     </div>
   );

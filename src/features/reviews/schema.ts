@@ -28,7 +28,7 @@ export const stepsSchema = z
         ctx.addIssue({
           code: "custom",
           path: [index, "rule"],
-          message: `Can't need more approvals than reviewers (${step.reviewers.length}).`,
+          message: "Can't need more approvals than there are reviewers.",
         });
       }
       for (const reviewer of step.reviewers) {

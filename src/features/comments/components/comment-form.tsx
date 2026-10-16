@@ -9,6 +9,7 @@ import { AnnotationField } from "@/features/annotations/components/annotation-fi
 import { annotationSchema } from "@/features/annotations/schema";
 import { currentFrameMs, useOptionalPlayer } from "@/features/player/player-context";
 import { formatTimecode } from "@/features/player/timecode";
+import { useI18n } from "@/i18n/client";
 import { checkRange, commentFieldsSchema, keepMentionsInBody, type Member } from "../schema";
 
 // The form's own schema is a slice of the API schema: same rules on both sides.
@@ -37,6 +38,7 @@ const MAX_SUGGESTIONS = 6;
 
 export function CommentForm(props: Props) {
   const player = useOptionalPlayer();
+  const { t } = useI18n();
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -180,15 +182,15 @@ export function CommentForm(props: Props) {
                 {rangeEndMs !== null && ` – ${formatTimecode(rangeEndMs / 1000, player.rate)}`}
               </span>
               <button type="button" className="underline" onClick={captureTimecode}>
-                Use current frame
+                {t.comments.useCurrentFrame}
               </button>
               {rangeEndMs === null ? (
                 <button type="button" className="underline" onClick={captureRangeEnd}>
-                  Set range end
+                  {t.comments.setRangeEnd}
                 </button>
               ) : (
                 <button type="button" className="underline" onClick={() => form.setValue("rangeEndMs", null, { shouldValidate: true })}>
-                  Clear range
+                  {t.comments.clearRange}
                 </button>
               )}
               <button
@@ -202,7 +204,7 @@ export function CommentForm(props: Props) {
                   form.setValue("annotation", null);
                 }}
               >
-                No timecode
+                {t.comments.noTimecode}
               </button>
             </>
           ) : (
@@ -214,7 +216,7 @@ export function CommentForm(props: Props) {
                 captureTimecode();
               }}
             >
-              Add timecode
+              {t.comments.addTimecode}
             </button>
           )}
         </div>
@@ -241,8 +243,8 @@ export function CommentForm(props: Props) {
           }}
           rows={3}
           autoFocus={props.autoFocus}
-          placeholder="Add a comment… (@ to mention, Ctrl+Enter to send)"
-          aria-label="Comment"
+          placeholder={t.comments.placeholder}
+          aria-label={t.comments.comment}
           aria-invalid={Boolean(errors.body)}
           // Combobox: a text field that can pop up a list (the @mention suggestions).
           role="combobox"
@@ -263,7 +265,7 @@ export function CommentForm(props: Props) {
           <ul
             id={listId}
             role="listbox"
-            aria-label="Mention someone"
+            aria-label={t.comments.mentionList}
             className="absolute left-0 z-10 mt-1 w-64 rounded-md border border-neutral-200 bg-white py-1 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
           >
             {suggestions.map((member, index) => (
@@ -295,7 +297,7 @@ export function CommentForm(props: Props) {
         </Button>
         {props.onCancel && (
           <button type="button" onClick={props.onCancel} className="text-sm underline">
-            Cancel
+            {t.common.cancel}
           </button>
         )}
       </div>

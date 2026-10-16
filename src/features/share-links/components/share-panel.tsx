@@ -1,34 +1,35 @@
 import { LocalTime } from "@/components/local-time";
+import { getI18n } from "@/i18n/server";
 import type { ShareLinkSummary } from "../schema";
 import { CreateShareLinkForm } from "./create-share-link-form";
 import { RevokeButton } from "./revoke-button";
 
 type Props = { assetId: string; links: ShareLinkSummary[]; versions: { id: string; number: number }[] };
 
-const STATE_TEXT = { active: "Active", revoked: "Revoked", expired: "Expired" } as const;
 
 // Server Component: the asset's share links (editors and owners only). The
 // URLs themselves aren't here: the server only has their hashes.
-export function SharePanel({ assetId, links, versions }: Props) {
+export async function SharePanel({ assetId, links, versions }: Props) {
+  const { t } = await getI18n();
   return (
-    <section aria-label="Share links" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-      <h2 className="font-semibold">Share links</h2>
+    <section aria-label={t.share.region} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+      <h2 className="font-semibold">{t.share.region}</h2>
       {links.length > 0 && (
         <ul className="flex flex-col gap-1">
           {links.map((link) => (
             <li key={link.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${link.state !== "active" ? "text-neutral-500" : ""}`}>
-              <span className="font-medium">{STATE_TEXT[link.state]}</span>
-              <span>{link.versionNumber ? `v${link.versionNumber}` : "latest version"}</span>
-              {link.hasPassword && <span>password</span>}
-              {link.allowComments && <span>comments</span>}
-              {link.allowDownload && <span>download</span>}
+              <span className="font-medium">{t.share.states[link.state]}</span>
+              <span>{link.versionNumber ? `v${link.versionNumber}` : t.share.latestVersion}</span>
+              {link.hasPassword && <span>{t.share.hasPassword}</span>}
+              {link.allowComments && <span>{t.share.comments}</span>}
+              {link.allowDownload && <span>{t.share.download}</span>}
               {link.expiresAt && (
                 <span>
-                  {link.state === "expired" ? "expired " : "until "}
+                  {link.state === "expired" ? t.share.expiredOn : t.share.until}
                   <LocalTime value={new Date(link.expiresAt)} />
                 </span>
               )}
-              <span className="text-neutral-500">by {link.createdBy}</span>
+              <span className="text-neutral-500">{t.share.by(link.createdBy)}</span>
               {link.state === "active" && <RevokeButton linkId={link.id} />}
             </li>
           ))}

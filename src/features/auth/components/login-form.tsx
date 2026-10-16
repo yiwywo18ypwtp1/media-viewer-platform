@@ -3,11 +3,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button, Field, FormMessage, Input } from "@/components/form";
+import { useI18n } from "@/i18n/client";
 import { applyActionError } from "@/lib/apply-action-error";
 import { login } from "../actions";
 import { loginSchema } from "../schema";
 
 export function LoginForm({ next }: { next: string }) {
+  const { t } = useI18n();
   const form = useForm({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
@@ -22,7 +24,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
-      <Field label="Email" htmlFor="email" error={errors.email?.message}>
+      <Field label={t.auth.email} htmlFor="email" error={errors.email?.message}>
         <Input
           id="email"
           type="email"
@@ -31,7 +33,7 @@ export function LoginForm({ next }: { next: string }) {
           {...form.register("email")}
         />
       </Field>
-      <Field label="Password" htmlFor="password" error={errors.password?.message}>
+      <Field label={t.auth.password} htmlFor="password" error={errors.password?.message}>
         <Input
           id="password"
           type="password"
@@ -42,7 +44,7 @@ export function LoginForm({ next }: { next: string }) {
       </Field>
       {errors.root && <FormMessage tone="error">{errors.root.message}</FormMessage>}
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Signing in…" : "Sign in"}
+        {isSubmitting ? t.auth.signingIn : t.auth.signIn}
       </Button>
     </form>
   );

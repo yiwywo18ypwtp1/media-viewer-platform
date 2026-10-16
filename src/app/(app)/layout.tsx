@@ -2,23 +2,26 @@ import Link from "next/link";
 import { logout } from "@/features/auth/actions";
 import { requireUser } from "@/features/auth/session";
 import { listInbox } from "@/features/reviews/server";
+import { LocaleSwitcher } from "@/i18n/locale-switcher";
+import { getI18n } from "@/i18n/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const waiting = (await listInbox(user.id)).length;
+  const { t } = await getI18n();
 
   return (
     <>
       <header className="border-b border-neutral-200 dark:border-neutral-800">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <Link href="/" className="font-semibold">
-            Media Review Hub
+            {t.common.appName}
           </Link>
           <div className="flex items-center gap-4 text-sm">
             <Link href="/inbox" className="hover:underline">
-              Inbox
+              {t.nav.inbox}
               {waiting > 0 && (
-                <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-xs text-white" aria-label={`${waiting} waiting`}>
+                <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-xs text-white" aria-label={t.nav.waiting(waiting)}>
                   {waiting}
                 </span>
               )}
@@ -27,9 +30,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {/* A plain form posting to the action: works without client JS. */}
             <form action={logout}>
               <button type="submit" className="underline">
-                Sign out
+                {t.nav.signOut}
               </button>
             </form>
+            <LocaleSwitcher />
           </div>
         </div>
       </header>

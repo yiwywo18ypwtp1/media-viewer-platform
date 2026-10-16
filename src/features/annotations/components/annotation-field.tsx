@@ -2,6 +2,7 @@
 
 import { useEffect, useEffectEvent, useState } from "react";
 import { usePlayer } from "@/features/player/player-context";
+import { useI18n } from "@/i18n/client";
 import { COLORS, type Shape, type Tool } from "../schema";
 import { AnnotationLayer } from "./annotation-layer";
 import { AnnotationToolbar } from "./annotation-toolbar";
@@ -20,6 +21,7 @@ type Props = {
 // which is portaled over the video.
 export function AnnotationField({ value, onChange, atMs, pinCurrentFrame }: Props) {
   const player = usePlayer();
+  const { t } = useI18n();
   const { setDrawing } = player;
   const [drawing, setDrawingMode] = useState(false);
   const [tool, setTool] = useState<Tool>("arrow");
@@ -74,11 +76,11 @@ export function AnnotationField({ value, onChange, atMs, pinCurrentFrame }: Prop
       ) : (
         <div className="flex gap-3 text-xs">
           <button type="button" className="underline" onClick={startDrawing}>
-            {shapes.length > 0 ? `Edit drawing (${shapes.length})` : "Draw on frame"}
+            {shapes.length > 0 ? t.annotations.editDrawing(shapes.length) : t.annotations.draw}
           </button>
           {shapes.length > 0 && (
             <button type="button" className="underline" onClick={() => onChange(null)}>
-              Remove drawing
+              {t.annotations.removeDrawing}
             </button>
           )}
         </div>
