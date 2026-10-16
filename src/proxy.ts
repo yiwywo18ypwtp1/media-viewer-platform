@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/features/auth/cookie";
+import { contentSecurityPolicy } from "@/lib/csp";
 
 // Optimistic gate only: checks that a session cookie exists, without touching
 // the database. The real check (valid, unexpired session) is requireUser()
@@ -21,12 +22,22 @@ const REQUEST_ID = /^[\w-]{1,64}$/;
 export function proxy(request: NextRequest) {
   const incoming = request.headers.get("x-request-id");
   const requestId = incoming && REQUEST_ID.test(incoming) ? incoming : crypto.randomUUID();
-  const response = handle(request, requestId);
+  // A fresh nonce per request: Next reads it from the request's CSP header and
+  // puts it on the scripts it renders; the browser runs no other scripts.
+  const nonce = btoa(crypto.randomUUID());
+  const csp = contentSecurityPolicy({
+    nonce,
+    s3Origin: new URL(process.env.S3_PUBLIC_ENDPOINT!).origin,
+    dev: process.env.NODE_ENV === "development",
+    https: process.env.APP_URL!.startsWith("https://"),
+  });
+  const response = handle(request, requestId, csp);
   response.headers.set("x-request-id", requestId);
+  response.headers.set("Content-Security-Policy", csp);
   return response;
 }
 
-function handle(request: NextRequest, requestId: string): Response {
+function handle(request: NextRequest, requestId: string, csp: string): Response {
   const { pathname, search } = request.nextUrl;
 
   // CSRF protection for Route Handlers authenticated by cookie. Browsers always
@@ -50,6 +61,7 @@ function handle(request: NextRequest, requestId: string): Response {
   if (isPublic(pathname) || request.cookies.has(SESSION_COOKIE)) {
     const headers = new Headers(request.headers);
     headers.set("x-request-id", requestId);
+    headers.set("Content-Security-Policy", csp);
     return NextResponse.next({ request: { headers } });
   }
 
