@@ -6,17 +6,17 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
-import { UnrecoverableError, type Job } from "bullmq";
+import { UnrecoverableError, type Job, type Queue } from "bullmq";
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { Redis } from "ioredis";
 import type { Logger } from "pino";
-import type { MediaJob } from "../../src/server/jobs";
+import { TRANSCRIBE_JOB_OPTIONS, type MediaJob, type TranscribeJob } from "../../src/server/jobs";
 import { projectChannel, type ProcessingEvent } from "../../src/server/realtime";
 import * as schema from "../../src/server/schema";
 import { planSprite, type SpriteInfo } from "../../src/features/player/sprite";
 import { ffmpeg, probe, type MediaInfo } from "../ffmpeg";
-import { inSpan, withTraceFrom } from "../../src/server/tracing";
+import { inSpan, traceCarrier, withTraceFrom } from "../../src/server/tracing";
 import { contentTypeOf, HLS_DIR, hlsArgs, mp4FromHlsArgs, spriteArgs } from "../renditions";
 
 // One job = one asset version: verify the original, read its metadata, render
@@ -37,13 +37,16 @@ type Deps = {
   bucket: string;
   publisher: Redis;
   log: Logger;
+  // Set when the Whisper service is configured (bonus): videos with sound get
+  // a transcript job once they're ready.
+  transcribeQueue?: Queue<TranscribeJob>;
 };
 
 // Files to store, by path relative to the work dir (= relative to the
 // version's prefix in S3).
 type Rendered = { files: string[]; sprite?: SpriteInfo };
 
-export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
+export function createProcessMedia({ db, s3, bucket, publisher, log, transcribeQueue }: Deps) {
   const { assetVersions, assets } = schema;
 
   // The job runs inside the trace of the request that queued it (if any).
@@ -130,8 +133,10 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
       for (const name of rendered.files) keys[name] = `versions/${versionId}/${name}`;
       await inSpan("store renditions", { "files.count": rendered.files.length }, () => putFiles(dir, keys, signal));
 
+      const transcribe = Boolean(transcribeQueue) && info.kind === "video" && info.hasAudio;
       await update({
         state: "ready",
+        transcriptState: transcribe ? "pending" : null,
         progress: 100,
         processingState: "ready",
         processingProgress: 100,
@@ -147,6 +152,12 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
         fps: info.kind === "video" ? info.fps : null,
       });
       jobLog.info({ kind: info.kind }, "processing finished");
+      if (transcribe) {
+        await transcribeQueue!.add("transcribe", { versionId, trace: traceCarrier() }, {
+          ...TRANSCRIBE_JOB_OPTIONS,
+          jobId: `transcribe-${versionId}`,
+        });
+      }
     } catch (error) {
       const finalAttempt =
         error instanceof UnrecoverableError || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);

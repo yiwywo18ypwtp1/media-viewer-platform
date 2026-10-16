@@ -23,6 +23,8 @@ export const webEnvSchema = baseSchema.extend({
 });
 
 export const workerEnvSchema = baseSchema.extend({
+  // Whisper service (bonus, profile "transcription"). Unset: no transcripts.
+  WHISPER_URL: z.url().optional(),
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().positive(),
   MAIL_FROM: z.string().min(1),

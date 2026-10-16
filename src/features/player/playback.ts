@@ -17,6 +17,9 @@ export type PlaybackUrls = {
   imageUrl: string | null; // large WebP (images)
   posterUrl: string | null;
   sprite: (SpriteInfo & { url: string; key?: undefined }) | null;
+  // WebVTT made by Whisper (bonus), and where transcription stands.
+  subtitles: { url: string; language: string | null } | null;
+  transcript: "pending" | "running" | "ready" | "failed" | null;
   expiresAt: string;
 };
 
@@ -41,6 +44,9 @@ export async function getPlaybackUrls(
       posterKey: assetVersions.posterKey,
       hlsKey: assetVersions.hlsKey,
       sprite: assetVersions.sprite,
+      transcriptState: assetVersions.transcriptState,
+      transcriptKey: assetVersions.transcriptKey,
+      transcriptLanguage: assetVersions.transcriptLanguage,
     })
     .from(assetVersions)
     .where(and(eq(assetVersions.id, versionId), eq(assetVersions.assetId, assetId)))
@@ -49,11 +55,12 @@ export async function getPlaybackUrls(
 
   const ttl = options.ttlSeconds ?? PLAYBACK_TTL_SECONDS;
   const sign = (key: string | null | undefined) => (key ? presignGetUrl(key, ttl) : null);
-  const [videoUrl, imageUrl, posterUrl, spriteUrl] = await Promise.all([
+  const [videoUrl, imageUrl, posterUrl, spriteUrl, subtitlesUrl] = await Promise.all([
     sign(version.mp4Key),
     sign(version.previewKey),
     sign(version.posterKey),
     sign(version.sprite?.key),
+    version.transcriptState === "ready" ? sign(version.transcriptKey) : null,
   ]);
   const hlsBase = options.hlsBase ?? `/api/assets/${assetId}/versions/${versionId}/hls`;
   return {
@@ -63,6 +70,8 @@ export async function getPlaybackUrls(
     posterUrl,
     // The storage key stays on the server; the page gets the signed URL.
     sprite: version.sprite && spriteUrl ? { ...version.sprite, key: undefined, url: spriteUrl } : null,
+    subtitles: subtitlesUrl ? { url: subtitlesUrl, language: version.transcriptLanguage } : null,
+    transcript: version.transcriptState,
     expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
   };
 }

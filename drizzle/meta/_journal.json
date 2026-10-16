@@ -85,6 +85,13 @@
       "when": 1792144267075,
       "tag": "0011_share_links",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792151888055,
+      "tag": "0012_transcripts",
+      "breakpoints": true
     }
   ]
 }

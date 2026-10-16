@@ -25,4 +25,7 @@ export type CommentEvent =
 // Review requests: small and rare, so receivers just re-render from the server.
 export type ReviewEvent = { type: "review"; assetId: string };
 
-export type RealtimeEvent = ProcessingEvent | CommentEvent | ReviewEvent;
+// Transcription finished or failed (bonus): viewers re-render to get subtitles.
+export type TranscriptEvent = { type: "transcript"; assetId: string; versionId: string; state: "pending" | "running" | "ready" | "failed" };
+
+export type RealtimeEvent = ProcessingEvent | CommentEvent | ReviewEvent | TranscriptEvent;

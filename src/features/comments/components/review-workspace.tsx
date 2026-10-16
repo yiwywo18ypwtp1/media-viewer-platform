@@ -5,6 +5,7 @@ import { AnnotationLayer } from "@/features/annotations/components/annotation-la
 import { Player } from "@/features/player/components/player";
 import type { PlaybackUrls } from "@/features/player/playback";
 import { PlayerProvider, seekTo, useOptionalPlayer } from "@/features/player/player-context";
+import { TranscriptPanel } from "@/features/transcripts/components/transcript-panel";
 import type { Marker } from "../comment-changes";
 import type { CommentPage, Member } from "../schema";
 import { useComments } from "../use-comments";
@@ -70,7 +71,7 @@ function Workspace(props: Props) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
       {showSelectedDrawing && <AnnotationLayer shapes={selected.annotation!} atMs={selected.timecodeMs!} />}
-      <div>
+      <div className="flex flex-col gap-4">
         {props.video ? (
           <Player
             key={props.versionId}
@@ -82,6 +83,7 @@ function Workspace(props: Props) {
         ) : (
           props.media
         )}
+        {props.video && <TranscriptPanel versionId={props.versionId} state={props.video.urls.transcript} />}
       </div>
       <CommentsPanel
         comments={comments}

@@ -38,6 +38,19 @@ export const MEDIA_JOB_OPTIONS: DefaultJobOptions = {
   removeOnFail: 5000,
 };
 
+// Speech to text (bonus): only used when the Whisper service is configured.
+// jobId = "transcribe-<versionId>", one transcript per version.
+export const TRANSCRIBE_QUEUE = "transcribe";
+export type TranscribeJob = { versionId: string; trace?: TraceCarrier };
+
+export const TRANSCRIBE_JOB_OPTIONS: DefaultJobOptions = {
+  attempts: 3,
+  // Whisper may still be loading its model right after start: wait a bit.
+  backoff: { type: "exponential", delay: 30_000 },
+  removeOnComplete: 1000,
+  removeOnFail: 5000,
+};
+
 export const MAINTENANCE_QUEUE = "maintenance";
 
 // Delayed job on the maintenance queue: fires 24 h before a review is due.

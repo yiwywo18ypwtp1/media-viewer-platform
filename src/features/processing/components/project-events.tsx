@@ -42,6 +42,8 @@ export function ProjectEvents({ projectId, children }: { projectId: string; chil
       // Review changes are rare and touch several parts of the page (status
       // badge, review panel): simplest to re-render from the server.
       if (event.type === "review") return router.refresh();
+      // A finished transcript adds subtitles and search: same approach.
+      if (event.type === "transcript") return event.state === "ready" || event.state === "failed" ? router.refresh() : undefined;
       if (event.type !== "processing") return;
 
       if (event.state === "ready" || event.state === "failed") {

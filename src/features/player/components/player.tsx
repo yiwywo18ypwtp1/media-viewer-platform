@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlaybackUrls } from "../playback";
-import { seekTo, stepFrames, togglePlay, usePlayer } from "../player-context";
+import { seekTo, showCaptions, stepFrames, togglePlay, usePlayer } from "../player-context";
 import { AUTO_QUALITY, useVideoSource } from "../use-video-source";
 import { ShortcutsDialog } from "./shortcuts-dialog";
 import { Timeline, type TimelineMarker } from "./timeline";
@@ -32,6 +32,7 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
   const [speed, setSpeed] = useState(1);
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [captions, setCaptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const resumeAt = useRef<{ time: number; play: boolean } | null>(null);
   // Whether the user wants playback. Kept separately because on a media error
@@ -39,6 +40,9 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
   const wantsToPlay = useRef(false);
   const lastRefresh = useRef(0);
   const source = useVideoSource(videoRef, urls);
+  // From the latest props, not the `urls` state: subtitles can appear while
+  // the page is open (transcription finished, the page re-rendered).
+  const subtitles = initialUrls.subtitles;
 
   // Mirror element state into React state (it can change from shortcuts,
   // native gestures or the browser itself).
@@ -90,6 +94,13 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
     resumeAt.current = null;
     video.currentTime = resume.time;
     if (resume.play) void video.play();
+  }
+
+  // Subtitles (bonus): the browser draws the <track>; we only show or hide it.
+  function toggleCaptions() {
+    if (!videoRef.current) return;
+    showCaptions(videoRef.current, !captions);
+    setCaptions(!captions);
   }
 
   function toggleFullscreen() {
@@ -180,8 +191,13 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
             onClick={() => videoRef.current && togglePlay(videoRef.current)}
             onError={() => void onVideoError()}
             onLoadedMetadata={onLoadedMetadata}
+            // The subtitles file comes from S3 (another origin): the track
+            // only loads with CORS, which MinIO allows for our origin.
+            crossOrigin={subtitles ? "anonymous" : undefined}
             className={`w-full object-contain ${fullscreen ? "h-full" : "max-h-[70vh]"}`}
-          />
+          >
+            {subtitles && <track kind="subtitles" src={subtitles.url} srcLang={subtitles.language ?? "und"} label="Transcript" />}
+          </video>
           {/* Annotation layers are portaled in here (see annotation-layer.tsx). */}
           <div ref={setOverlayHost} className="pointer-events-none absolute inset-0" />
           {(error || source.denied) && (
@@ -255,6 +271,11 @@ export function Player({ refreshUrl, initialUrls, markers, onMarkerSelect }: Pro
             >
               {muted ? "Unmute" : "Mute"}
             </button>
+            {subtitles && (
+              <button type="button" onClick={toggleCaptions} aria-pressed={captions} aria-label="Subtitles">
+                CC
+              </button>
+            )}
             <button type="button" onClick={toggleFullscreen} aria-pressed={fullscreen}>
               {fullscreen ? "Exit fullscreen" : "Fullscreen"}
             </button>

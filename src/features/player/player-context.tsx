@@ -69,6 +69,12 @@ export function togglePlay(video: HTMLVideoElement) {
   else video.pause();
 }
 
+// The subtitle track (bonus): the browser draws it, we show or hide it.
+export function showCaptions(video: HTMLVideoElement, shown: boolean) {
+  const track = video.textTracks[0];
+  if (track) track.mode = shown ? "showing" : "hidden";
+}
+
 export function seekTo(video: HTMLVideoElement, seconds: number) {
   video.currentTime = Math.min(Math.max(0, seconds), video.duration || 0);
 }

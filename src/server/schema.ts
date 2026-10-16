@@ -1,7 +1,8 @@
 // Drizzle table definitions. Tables are added per feature, each with its own migration.
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  customType,
   bigint,
   boolean,
   check,
@@ -133,6 +134,7 @@ export const projects = pgTable(
 export const assetKind = pgEnum("asset_kind", ["video", "image"]);
 export const assetStatus = pgEnum("asset_status", ["in_review", "changes_requested", "approved"]);
 export const processingState = pgEnum("processing_state", ["pending", "running", "ready", "failed"]);
+export const transcriptState = pgEnum("transcript_state", ["pending", "running", "ready", "failed"]);
 export const uploadStatus = pgEnum("upload_status", ["uploading", "completed", "aborted"]);
 
 // A folder tree inside a project. parent_id null = top level. Names are unique
@@ -207,6 +209,12 @@ export const assetVersions = pgTable(
     hlsKey: text("hls_key"),
     // Video: scrubbing thumbnails in one JPEG, with the grid geometry.
     sprite: jsonb("sprite").$type<SpriteInfo & { key: string }>(),
+    // Speech to subtitles (bonus, only when the Whisper service runs). null =
+    // not transcribed (no service, no audio, or an image).
+    transcriptState: transcriptState("transcript_state"),
+    transcriptLanguage: text("transcript_language"),
+    transcriptKey: text("transcript_key"), // WebVTT in S3
+    transcriptError: text("transcript_error"),
 
     durationMs: integer("duration_ms"),
     width: integer("width"),
@@ -244,6 +252,29 @@ export const uploads = pgTable(
     createdAt: createdAt(),
   },
   (table) => [index("uploads_status_created_at_idx").on(table.status, table.createdAt)],
+);
+
+// Postgres full-text search vector (no built-in Drizzle type).
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
+
+// One line of a transcript, searchable. The "simple" text search config
+// doesn't stem, so it works the same for Russian and English.
+export const transcriptSegments = pgTable(
+  "transcript_segments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => assetVersions.id, { onDelete: "cascade" }),
+    startMs: integer("start_ms").notNull(),
+    endMs: integer("end_ms").notNull(),
+    text: text("text").notNull(),
+    search: tsvector("search").generatedAlwaysAs((): SQL => sql`to_tsvector('simple', ${transcriptSegments.text})`),
+  },
+  (table) => [
+    index("transcript_segments_version_idx").on(table.versionId, table.startMs),
+    index("transcript_segments_search_idx").using("gin", table.search),
+  ],
 );
 
 // --- Share links ---

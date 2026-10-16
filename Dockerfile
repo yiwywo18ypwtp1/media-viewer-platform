@@ -81,3 +81,32 @@ RUN --mount=type=cache,target=/home/pwuser/.npm,uid=1001,gid=1001 \
 COPY --chown=pwuser:pwuser playwright.config.ts ./
 COPY --chown=pwuser:pwuser e2e ./e2e
 CMD ["npx", "playwright", "test"]
+
+# --- Whisper (bonus, compose profile "transcription"): whisper.cpp's HTTP
+# server with a small multilingual model. Built from a pinned release so the
+# same Dockerfile works on amd64 and arm64. ---
+FROM debian:bookworm-slim AS whisper-build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+ARG WHISPER_VERSION=v1.9.4
+RUN git clone --depth 1 --branch ${WHISPER_VERSION} https://github.com/ggml-org/whisper.cpp /src
+WORKDIR /src
+# Static, portable build (no -march=native: the image may run on another CPU).
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF \
+    && cmake --build build --target whisper-server -j
+# "base": 142 MB, multilingual (Russian and English), fast enough on a CPU.
+ARG WHISPER_MODEL=base
+RUN curl -fL -o /ggml-model.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${WHISPER_MODEL}.bin
+
+FROM debian:bookworm-slim AS whisper
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 1000 whisper
+COPY --from=whisper-build /src/build/bin/whisper-server /usr/local/bin/whisper-server
+COPY --from=whisper-build /ggml-model.bin /models/ggml-model.bin
+USER whisper
+EXPOSE 8080
+# No curl in the image: bash can open a TCP connection by itself.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+    CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+CMD ["whisper-server", "--host", "0.0.0.0", "--port", "8080", "--model", "/models/ggml-model.bin", "--language", "auto"]

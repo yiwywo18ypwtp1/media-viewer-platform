@@ -5,7 +5,7 @@ import { Redis } from "ioredis";
 import nodemailer from "nodemailer";
 import postgres from "postgres";
 import { parseEnv, workerEnvSchema, type WorkerEnv } from "../src/server/env-schema";
-import { EMAIL_QUEUE, MAINTENANCE_QUEUE, MEDIA_QUEUE, type MediaJob } from "../src/server/jobs";
+import { EMAIL_QUEUE, MAINTENANCE_QUEUE, MEDIA_QUEUE, TRANSCRIBE_QUEUE, type MediaJob, type TranscribeJob } from "../src/server/jobs";
 import { createLogger } from "../src/server/logger";
 import { createS3Client } from "../src/server/s3-client";
 import * as schema from "../src/server/schema";
@@ -15,6 +15,7 @@ import { createProcessMedia } from "./jobs/process-media";
 import { createReviewReminder } from "./jobs/review-reminder";
 import { createSendEmail } from "./jobs/send-email";
 import { createSweepPending } from "./jobs/sweep-pending";
+import { createTranscribe } from "./jobs/transcribe";
 
 const log = createLogger("worker");
 
@@ -53,7 +54,9 @@ async function main() {
   const mediaQueue = new Queue<MediaJob>(MEDIA_QUEUE, { connection: redis });
   const maintenance = new Queue(MAINTENANCE_QUEUE, { connection: redis });
 
-  const processMedia = createProcessMedia({ db, s3, bucket: env.S3_BUCKET, publisher: redis, log });
+  // Transcription (bonus) only when a Whisper service is configured.
+  const transcribeQueue = env.WHISPER_URL ? new Queue<TranscribeJob>(TRANSCRIBE_QUEUE, { connection: redis }) : undefined;
+  const processMedia = createProcessMedia({ db, s3, bucket: env.S3_BUCKET, publisher: redis, log, transcribeQueue });
   const cleanupUploads = createCleanupUploads({ db, s3, bucket: env.S3_BUCKET, log });
   const sweepPending = createSweepPending({ db, mediaQueue, log });
   const reviewReminder = createReviewReminder({ db, mailer, from: env.MAIL_FROM, appUrl: env.APP_URL, log });
@@ -71,6 +74,16 @@ async function main() {
       },
       { connection: redis },
     ),
+    // One recording at a time: Whisper uses every CPU core it gets.
+    ...(env.WHISPER_URL
+      ? [
+          new Worker(
+            TRANSCRIBE_QUEUE,
+            createTranscribe({ db, s3, bucket: env.S3_BUCKET, publisher: redis, log, whisperUrl: env.WHISPER_URL }),
+            { connection: redis, concurrency: 1 },
+          ),
+        ]
+      : []),
   ];
 
   // Idempotent: every worker replica upserts the same scheduler, and BullMQ
@@ -100,7 +113,7 @@ async function main() {
     clearInterval(heartbeat);
     // close() stops taking new jobs and waits for the active ones to finish.
     await Promise.all(workers.map((worker) => worker.close()));
-    await Promise.all([maintenance.close(), mediaQueue.close()]);
+    await Promise.all([maintenance.close(), mediaQueue.close(), transcribeQueue?.close()]);
     await redis.quit();
     await sql.end();
     await tracing?.shutdown();

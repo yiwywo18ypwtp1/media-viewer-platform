@@ -137,6 +137,15 @@ services:
     # 16686: web UI. OTLP over HTTP (4318) is only used inside the network.
     ports: ["16686:16686"]
 
+  # Speech to subtitles (bonus): whisper.cpp's server. Enabled with the profile
+  # and WHISPER_URL in .env:  docker compose --profile transcription up
+  whisper:
+    profiles: [transcription]
+    build: { context: ., target: whisper }
+    restart: unless-stopped
+    # Only reached by worker, inside the network.
+    stop_grace_period: 30s
+
   # Integration tests (Vitest) against the real Postgres, Redis and MinIO:
   #   docker compose --profile integration run --rm integration
   integration:
