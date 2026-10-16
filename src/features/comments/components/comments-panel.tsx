@@ -19,6 +19,8 @@ type Props = {
   isVideo: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  // All comments of the version as a CSV download.
+  exportUrl: string;
 };
 
 // The thread list. Re-renders when comments change, never during playback:
@@ -29,9 +31,16 @@ export function CommentsPanel(props: Props) {
 
   return (
     <section aria-label="Comments" className="flex flex-col gap-4">
-      <h2 className="text-sm font-semibold">
-        Comments <span className="font-normal text-neutral-500">({openCount} open)</span>
-      </h2>
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">
+          Comments <span className="font-normal text-neutral-500">({openCount} open)</span>
+        </h2>
+        {comments.threads.length > 0 && (
+          <a href={props.exportUrl} download className="text-xs underline">
+            Export CSV
+          </a>
+        )}
+      </div>
 
       {comments.notice && (
         <div role="status" className="flex justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">

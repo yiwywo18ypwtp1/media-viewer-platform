@@ -91,6 +91,7 @@ function Workspace(props: Props) {
         // Per asset, not per version: a draft survives switching versions.
         draftKey={`comment-draft:${props.assetId}`}
         isVideo={Boolean(props.video)}
+        exportUrl={`/api/versions/${props.versionId}/comments/export`}
         selectedId={selectedId}
         onSelect={select}
       />

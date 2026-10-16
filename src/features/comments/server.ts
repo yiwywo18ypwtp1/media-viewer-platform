@@ -40,6 +40,7 @@ export async function getVersionAccess(userId: string, versionId: unknown) {
       id: assetVersions.id,
       number: assetVersions.number,
       durationMs: assetVersions.durationMs,
+      fps: assetVersions.fps,
       assetId: assets.id,
       assetName: assets.name,
       kind: assets.kind,
