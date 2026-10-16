@@ -12,8 +12,20 @@ function isPublic(pathname: string) {
 }
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+// Accept a caller's request id only if it looks like one (no log injection).
+const REQUEST_ID = /^[\w-]{1,64}$/;
 
+// Every request gets an id: passed to the app in the x-request-id header (log
+// lines carry it, see server/request-log.ts) and echoed back in the response.
 export function proxy(request: NextRequest) {
+  const incoming = request.headers.get("x-request-id");
+  const requestId = incoming && REQUEST_ID.test(incoming) ? incoming : crypto.randomUUID();
+  const response = handle(request, requestId);
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
+function handle(request: NextRequest, requestId: string): Response {
   const { pathname, search } = request.nextUrl;
 
   // CSRF protection for Route Handlers authenticated by cookie. Browsers always
@@ -34,7 +46,9 @@ export function proxy(request: NextRequest) {
   }
 
   if (isPublic(pathname) || request.cookies.has(SESSION_COOKIE)) {
-    return NextResponse.next();
+    const headers = new Headers(request.headers);
+    headers.set("x-request-id", requestId);
+    return NextResponse.next({ request: { headers } });
   }
 
   // API clients get a status code, not an HTML redirect.

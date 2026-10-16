@@ -19,6 +19,7 @@ import { ApiError } from "@/server/api";
 import { getDb } from "@/server/db";
 import { getEnv } from "@/server/env";
 import { logger } from "@/server/logger";
+import { getRequestId, requestLogger } from "@/server/request-log";
 import { getMediaQueue } from "@/server/queues";
 import { getPresignS3, getS3 } from "@/server/s3";
 import { assets, assetVersions, reviewRequests, uploads } from "@/server/schema";
@@ -113,6 +114,7 @@ export async function createUpload(
     partSize,
   });
 
+  (await requestLogger()).info({ uploadId: id, projectId: access.project.id, size: input.size }, "upload started");
   return { uploadId: id, partSize, partCount: partCountOf({ size: input.size, partSize }) };
 }
 
@@ -250,8 +252,13 @@ export async function completeUpload(
   });
 
   if (result.created) {
+    (await requestLogger()).info({ uploadId, versionId: result.versionId }, "upload completed, version created");
     try {
-      await getMediaQueue().add("process", { versionId: result.versionId }, { jobId: result.versionId });
+      await getMediaQueue().add(
+        "process",
+        { versionId: result.versionId, requestId: await getRequestId() },
+        { jobId: result.versionId },
+      );
     } catch (error) {
       // The version is saved as "pending"; the worker's sweeper re-enqueues
       // pending versions, so a Redis blip here doesn't lose the job.

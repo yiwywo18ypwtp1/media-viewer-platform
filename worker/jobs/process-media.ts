@@ -59,7 +59,8 @@ export function createProcessMedia({ db, s3, bucket, publisher, log }: Deps) {
     if (!version) return log.warn({ jobId: job.id, versionId }, "version no longer exists, skipping");
     if (version.state === "ready") return log.info({ jobId: job.id, versionId }, "already processed, skipping");
 
-    const jobLog = log.child({ jobId: job.id, versionId, attempt: job.attemptsMade + 1 });
+    // requestId links these lines to the web request that completed the upload.
+    const jobLog = log.child({ jobId: job.id, versionId, requestId: job.data.requestId, attempt: job.attemptsMade + 1 });
     let lastDbProgress = 0;
 
     async function update(

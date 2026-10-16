@@ -23,7 +23,9 @@ export const EMAIL_JOB_OPTIONS: DefaultJobOptions = {
 export const MEDIA_QUEUE = "media";
 
 // jobId is the versionId, so enqueueing the same version twice is a no-op.
-export type MediaJob = { versionId: string };
+// requestId: the upload's "complete" request, so its log lines and the
+// worker's can be matched (absent when the sweeper re-enqueues).
+export type MediaJob = { versionId: string; requestId?: string };
 
 export const MEDIA_JOB_OPTIONS: DefaultJobOptions = {
   // Task 3.3: at most 3 attempts with exponential backoff (10 s, 20 s).

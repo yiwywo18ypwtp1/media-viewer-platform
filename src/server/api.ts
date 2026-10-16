@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { getCurrentUser, type CurrentUser } from "@/features/auth/session";
-import { logger } from "./logger";
+import { requestLogger } from "./request-log";
 
 // Route Handler helpers. All API errors use one shape (task section 4):
 //   { error: { code, message, fieldErrors?, details? } }
@@ -18,14 +18,14 @@ export class ApiError extends Error {
   }
 }
 
-export function errorResponse(error: unknown): Response {
+export async function errorResponse(error: unknown): Promise<Response> {
   if (error instanceof ApiError) {
     return Response.json(
       { error: { code: error.code, message: error.message, fieldErrors: error.fieldErrors, details: error.details } },
       { status: error.status },
     );
   }
-  logger.error({ err: error }, "unhandled API error");
+  (await requestLogger()).error({ err: error }, "unhandled API error");
   return Response.json({ error: { code: "internal_error", message: "Something went wrong." } }, { status: 500 });
 }
 
