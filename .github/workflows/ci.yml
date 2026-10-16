@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast feedback without Docker: lint, types, unit and component tests.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  # Builds the images (with the layer cache kept in GitHub's cache), checks the
+  # web image size, then runs the e2e profile against the full stack.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Bake reads the services' build settings from docker-compose.yml. Tags
+      # are the names compose itself gives the images (<project>-<service>),
+      # so the `up` below uses them as they are. One cache scope per image.
+      - name: Build images
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: docker-compose.yml
+          targets: web,worker,migrate,e2e
+          load: true
+          set: |
+            web.tags=media-review-hub-web
+            worker.tags=media-review-hub-worker
+            migrate.tags=media-review-hub-migrate
+            e2e.tags=media-review-hub-e2e
+            web.cache-from=type=gha,scope=web
+            web.cache-to=type=gha,scope=web,mode=max
+            worker.cache-from=type=gha,scope=worker
+            worker.cache-to=type=gha,scope=worker,mode=max
+            migrate.cache-from=type=gha,scope=migrate
+            migrate.cache-to=type=gha,scope=migrate,mode=max
+            e2e.cache-from=type=gha,scope=e2e
+            e2e.cache-to=type=gha,scope=e2e,mode=max
+
+      - name: Web image is at most 250 MB
+        run: |
+          size=$(docker image inspect media-review-hub-web --format '{{.Size}}')
+          echo "web image: $((size / 1000000)) MB"
+          test "$size" -le 250000000
+
+      - name: E2E (compose profile)
+        run: |
+          cp .env.example .env
+          # The test container runs as an unprivileged user; let it write the report.
+          mkdir -p e2e-results && chmod 777 e2e-results
+          docker compose --profile e2e up --no-build --abort-on-container-exit --exit-code-from e2e
+
+      - name: Service logs
+        if: failure()
+        run: docker compose --profile e2e logs --no-color > e2e-results/compose.log
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: e2e-results

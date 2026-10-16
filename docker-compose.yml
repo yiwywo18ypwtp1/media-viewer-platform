@@ -142,7 +142,8 @@ services:
       CI: "1"
     # Chromium needs more shared memory than Docker's 64 MB default.
     shm_size: 1gb
-    volumes: ["./e2e-results:/e2e/results"]
+    # Report and failure traces end up in ./e2e-results on the host.
+    volumes: ["./e2e-results:/e2e/e2e-results"]
     depends_on:
       caddy: { condition: service_healthy }
       worker: { condition: service_healthy }
