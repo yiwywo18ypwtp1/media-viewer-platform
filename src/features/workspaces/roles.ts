@@ -15,6 +15,7 @@ const MIN_ROLE = {
   createProject: "editor",
   upload: "editor",
   requestReview: "editor",
+  share: "editor",
   manageMembers: "owner",
 } as const satisfies Record<string, Role>;
 

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -245,6 +246,45 @@ export const uploads = pgTable(
   (table) => [index("uploads_status_created_at_idx").on(table.status, table.createdAt)],
 );
 
+// --- Share links ---
+
+// A public link to one asset. The token itself is only in the URL we showed
+// the creator once; here it's a SHA-256 hash, like session tokens.
+export const shareLinks = pgTable(
+  "share_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    // null = always the latest version.
+    versionId: uuid("version_id").references(() => assetVersions.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    passwordHash: text("password_hash"),
+    allowDownload: boolean("allow_download").notNull().default(false),
+    allowComments: boolean("allow_comments").notNull().default(false),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("share_links_asset_id_idx").on(table.assetId)],
+);
+
+// A guest who typed the right password: a random token in a cookie scoped to
+// the link's path, stored hashed. Revoking the link ends these too (every
+// request checks the link first).
+export const shareLinkSessions = pgTable("share_link_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  shareLinkId: uuid("share_link_id")
+    .notNull()
+    .references(() => shareLinks.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+});
+
 // --- Comments ---
 
 export const comments = pgTable(
@@ -256,9 +296,10 @@ export const comments = pgTable(
     versionId: uuid("version_id")
       .notNull()
       .references(() => assetVersions.id, { onDelete: "cascade" }),
-    authorId: uuid("author_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    // A member, or null for a guest commenting through a share link.
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "cascade" }),
+    guestName: text("guest_name"),
+    shareLinkId: uuid("share_link_id").references(() => shareLinks.id, { onDelete: "set null" }),
     // Replies are one level deep: parent is always a top-level comment.
     parentId: uuid("parent_id").references((): AnyPgColumn => comments.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
@@ -279,6 +320,7 @@ export const comments = pgTable(
   (table) => [
     index("comments_version_created_idx").on(table.versionId, table.createdAt, table.id),
     index("comments_parent_id_idx").on(table.parentId),
+    check("comments_member_or_guest", sql`${table.authorId} is not null or ${table.guestName} is not null`),
     // The API checks this too; the database has the last word.
     check(
       "comments_range_after_start",

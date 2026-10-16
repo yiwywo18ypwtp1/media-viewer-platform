@@ -10,6 +10,8 @@ import { listComments, listMarkers } from "@/features/comments/server";
 import { getPlaybackUrls } from "@/features/player/playback";
 import { ReviewPanel } from "@/features/reviews/components/review-panel";
 import { getLatestReview } from "@/features/reviews/server";
+import { SharePanel } from "@/features/share-links/components/share-panel";
+import { listShareLinks } from "@/features/share-links/server";
 import { ProcessingBadge } from "@/features/processing/components/processing-badge";
 import { ProjectEvents } from "@/features/processing/components/project-events";
 import { listMembers } from "@/features/workspaces/queries";
@@ -30,7 +32,8 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
   const version = versions.find((v) => v.number === requested) ?? versions[0];
 
   const canEdit = can(role, "upload");
-  const [urls, firstPage, markers, members, review, trail, folderPaths] = await Promise.all([
+  const canShare = can(role, "share");
+  const [urls, firstPage, markers, members, review, trail, folderPaths, shareLinks] = await Promise.all([
     version.processingState === "ready" ? getPlaybackUrls(asset.id, version.id) : null,
     listComments(version.id, null),
     listMarkers(version.id),
@@ -38,6 +41,7 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
     getLatestReview(asset.id),
     asset.folderId ? folderTrail(asset.folderId) : [],
     canEdit ? listFolderPaths(project.id) : [],
+    canShare ? listShareLinks(asset.id) : [],
   ]);
 
   // Shown instead of the player for images and versions still processing.
@@ -129,6 +133,9 @@ export default async function AssetPage({ params, searchParams }: PageProps<"/a/
           selectedVersionId={version.id}
           reviewers={members.filter((m) => can(m.role, "decideReview")).map((m) => ({ id: m.userId, name: m.name }))}
         />
+        {canShare && (
+          <SharePanel assetId={asset.id} links={shareLinks} versions={versions.map((v) => ({ id: v.id, number: v.number }))} />
+        )}
         <ReviewWorkspace
           // A different version is a different review: fresh comment state and player.
           key={version.id}
