@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlaybackUrls } from "../playback";
 import { seekTo, stepFrames, togglePlay, usePlayer } from "../player-context";
+import { AUTO_QUALITY, useVideoSource } from "../use-video-source";
 import { ShortcutsDialog } from "./shortcuts-dialog";
 import { Timeline, type TimelineMarker } from "./timeline";
 import { TimecodeDisplay } from "./timecode-display";
@@ -36,6 +37,7 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
   // the browser marks the element paused *before* the "pause" event fires.
   const wantsToPlay = useRef(false);
   const lastRefresh = useRef(0);
+  const source = useVideoSource(videoRef, urls);
 
   // Mirror element state into React state (it can change from shortcuts,
   // native gestures or the browser itself).
@@ -59,9 +61,12 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
     };
   }, [videoRef]);
 
-  // Presigned URLs expire (10 min). When the browser then fails to fetch more
-  // of the video, get fresh URLs and continue from the same position.
+  // Presigned MP4 URLs expire (10 min). When the browser then fails to fetch
+  // more of the video, get fresh URLs and continue from the same position.
+  // (HLS never gets here: its segments are signed one by one, see hls.ts, and
+  // hls.js reports its own errors to useVideoSource.)
   async function onVideoError() {
+    if (source.usingHls) return;
     const video = videoRef.current;
     if (!video || Date.now() - lastRefresh.current < 30_000) {
       setError("Playback failed. Reload the page to try again.");
@@ -76,15 +81,6 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
     }
     setUrls((await response.json()) as PlaybackUrls);
   }
-
-  // src is set here rather than as a JSX prop: re-signing the same key within
-  // the same second yields the *same* URL string, and React wouldn't touch an
-  // unchanged prop, so the video would never reload after an error. Assigning
-  // src always restarts loading; a new `urls` object = a reload.
-  useEffect(() => {
-    const video = videoRef.current;
-    if (video && urls.videoUrl) video.src = urls.videoUrl;
-  }, [urls, videoRef]);
 
   function onLoadedMetadata() {
     const video = videoRef.current;
@@ -195,7 +191,7 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
         </div>
 
         <div className="flex flex-col gap-2 px-3 py-2 text-white">
-          <Timeline markers={markers} onMarkerSelect={onMarkerSelect} />
+          <Timeline markers={markers} onMarkerSelect={onMarkerSelect} sprite={urls.sprite} />
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <button
               type="button"
@@ -230,6 +226,25 @@ export function Player({ assetId, versionId, initialUrls, markers, onMarkerSelec
                 ))}
               </select>
             </label>
+            {source.qualities.length > 1 && (
+              <label className="flex items-center gap-1 text-xs">
+                <span className="sr-only">Quality</span>
+                <select
+                  value={source.quality}
+                  onChange={(event) => source.setQuality(Number(event.target.value))}
+                  className="rounded bg-white/10 px-1 py-0.5"
+                >
+                  <option value={AUTO_QUALITY} className="text-black">
+                    Auto
+                  </option>
+                  {source.qualities.map((q) => (
+                    <option key={q.level} value={q.level} className="text-black">
+                      {q.height}p
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button
               type="button"
               onClick={() => {

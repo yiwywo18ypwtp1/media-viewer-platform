@@ -12,7 +12,9 @@ export function TimecodeDisplay() {
   const currentRef = useRef<HTMLSpanElement>(null);
 
   useVideoTime(videoRef, (seconds) => {
-    if (currentRef.current) currentRef.current.textContent = formatTimecode(seconds, rate);
+    // At the very end currentTime can run a few ms past the probed duration
+    // (audio a touch longer than video): show the same timecode as the total.
+    if (currentRef.current) currentRef.current.textContent = formatTimecode(Math.min(seconds, durationSeconds), rate);
   });
 
   return (

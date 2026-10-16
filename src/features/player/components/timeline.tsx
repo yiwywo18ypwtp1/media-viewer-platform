@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, type PointerEvent } from "react";
+import type { PlaybackUrls } from "../playback";
 import { seekTo, usePlayer } from "../player-context";
+import { spriteCellAt } from "../sprite";
 import { formatTimecode } from "../timecode";
 import { useVideoTime } from "../use-video-time";
 
@@ -13,13 +15,16 @@ export type TimelineMarker = { id: string; timeMs: number; resolved: boolean; la
 export function Timeline({
   markers,
   onMarkerSelect,
+  sprite = null,
 }: {
   markers: TimelineMarker[];
   onMarkerSelect: (id: string) => void;
+  sprite?: PlaybackUrls["sprite"];
 }) {
   const { videoRef, rate, durationSeconds } = usePlayer();
   const trackRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   useVideoTime(videoRef, (seconds) => {
     const fraction = durationSeconds > 0 ? Math.min(seconds / durationSeconds, 1) : 0;
@@ -29,13 +34,32 @@ export function Timeline({
     trackRef.current?.setAttribute("aria-valuetext", formatTimecode(seconds, rate));
   });
 
+  function pointerFraction(event: PointerEvent<HTMLDivElement>) {
+    const box = event.currentTarget.getBoundingClientRect();
+    return Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
+  }
+
   function seekToPointer(event: PointerEvent<HTMLDivElement>) {
     const video = videoRef.current;
-    const track = trackRef.current;
-    if (!video || !track) return;
-    const box = track.getBoundingClientRect();
-    const fraction = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
-    seekTo(video, fraction * durationSeconds);
+    if (video) seekTo(video, pointerFraction(event) * durationSeconds);
+  }
+
+  // Hover preview: the sprite cell and timecode under the pointer, set on the
+  // element directly (like the playhead) so moving the mouse re-renders nothing.
+  function showPreview(event: PointerEvent<HTMLDivElement>) {
+    const preview = previewRef.current;
+    if (!preview || !sprite) return;
+    const fraction = pointerFraction(event);
+    const seconds = fraction * durationSeconds;
+    const cell = spriteCellAt(sprite, seconds);
+    const image = preview.firstElementChild as HTMLElement;
+    image.style.backgroundPosition = `-${cell.x}px -${cell.y}px`;
+    preview.lastElementChild!.textContent = formatTimecode(seconds, rate);
+    // Centred on the pointer, kept inside the bar.
+    const box = event.currentTarget.getBoundingClientRect();
+    const left = Math.min(Math.max(fraction * box.width - sprite.thumbWidth / 2, 0), box.width - sprite.thumbWidth);
+    preview.style.transform = `translateX(${left}px)`;
+    preview.hidden = false;
   }
 
   return (
@@ -77,8 +101,29 @@ export function Timeline({
         }}
         onPointerMove={(event) => {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) seekToPointer(event);
+          if (event.pointerType === "mouse") showPreview(event);
+        }}
+        onPointerLeave={() => {
+          if (previewRef.current) previewRef.current.hidden = true;
         }}
       >
+        {sprite && (
+          <div
+            ref={previewRef}
+            hidden
+            aria-hidden
+            className="pointer-events-none absolute bottom-4 left-0 z-10 flex flex-col items-center gap-0.5 rounded bg-black/80 p-0.5"
+          >
+            <div
+              style={{
+                width: sprite.thumbWidth,
+                height: sprite.thumbHeight,
+                backgroundImage: `url("${sprite.url}")`,
+              }}
+            />
+            <span className="font-mono text-[10px] text-white" />
+          </div>
+        )}
         {/* Initial transform via `style`, not a scale-x-0 class: Tailwind v4 uses
           the separate CSS `scale` property, which would multiply with ours. */}
         <div
